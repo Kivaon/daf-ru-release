@@ -1,5 +1,6 @@
 "use client";
 
+import { parseModelResponse } from "./parseModelResponse";
 import AboutProject from "./AboutProject";
 import PrintPage from "./PrintPage";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -226,7 +227,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     setDraft(activeGeneratedArticle || fresh);setImportText("");setEditorMessage("");setEditorOpen(true);
   };
   const copyPrompt = async () => { try { await navigator.clipboard.writeText(promptForAI()); setCopied(true);setEditorMessage("");window.setTimeout(()=>setCopied(false),1800); } catch { setEditorMessage("Браузер не разрешил копирование. Выделите задание вручную."); } };
-  const parseImport = () => { try { const raw=JSON.parse(importText) as Record<string,unknown>; setDraft((current)=>({...current!,title:String(raw.title||""),translation:String(raw.translation||""),explanation:String(raw.explanation||""),parts:Array.isArray(raw.parts)?raw.parts as GeneratedPart[]:current!.parts,pages:Array.isArray(raw.pages)?raw.pages as GeneratedPage[]:current!.pages,rashi:Array.isArray(raw.rashi)?raw.rashi as GeneratedComment[]:current!.rashi,tosafot:Array.isArray(raw.tosafot)?raw.tosafot as GeneratedComment[]:current!.tosafot}));setEditorMessage("Ответ разобран. Проверьте и исправьте поля перед сохранением."); } catch { setEditorMessage("Не удалось разобрать JSON. Попросите AI ответить только JSON без оформления."); } };
+  const parseImport = () => { try { const raw=parseModelResponse(importText) as Record<string,unknown>; setDraft((current)=>({...current!,title:String(raw.title||""),translation:String(raw.translation||""),explanation:String(raw.explanation||""),parts:Array.isArray(raw.parts)?raw.parts as GeneratedPart[]:current!.parts,pages:Array.isArray(raw.pages)?raw.pages as GeneratedPage[]:current!.pages,rashi:Array.isArray(raw.rashi)?raw.rashi as GeneratedComment[]:current!.rashi,tosafot:Array.isArray(raw.tosafot)?raw.tosafot as GeneratedComment[]:current!.tosafot}));setEditorMessage("Ответ разобран. Проверьте и исправьте поля перед сохранением."); } catch { setEditorMessage("Не удалось разобрать JSON. Попросите AI ответить только JSON без оформления."); } };
   const saveArticle = async () => { if(!draft)return; setSaving(true);setEditorMessage(""); try { const response=await fetch("/api/articles",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...draft,tractate:tractate.sefaria,ref:selectedBlock})}); const data=await response.json(); if(!response.ok)throw new Error(data.error||"Ошибка сохранения"); setGeneratedArticle({...data.article,generatedAt:data.article.updatedAt});setEditorOpen(false); } catch(reason){setEditorMessage(reason instanceof Error?reason.message:String(reason));} finally{setSaving(false);} };
   const openUsers=()=>{window.location.href="/admin";};
   useEffect(() => {
