@@ -32,7 +32,7 @@ export default function PrintPage({tractate,label,segments,context,comments,read
           const index=next++;
           const response=await fetch(`/api/articles?tractate=${encodeURIComponent(tractate)}&ref=${encodeURIComponent(segments[index].id)}`,{signal:controller.signal});
           if(!response.ok)throw new Error("Не удалось загрузить все статьи. Повторите попытку перед печатью.");
-          const data=await response.json();
+          const data=await response.json() as {article:SavedPrintArticle|null};
           if(!Object.prototype.hasOwnProperty.call(data,"article"))throw new Error("Получен неполный ответ при загрузке статей.");
           saved[index]=data.article;
           if(!saved[index]&&tractate==="Bekhorot"&&segments[index].id==="2a:3")saved[index]={ref:"2a:3",title:"Почему необходимы оба случая?",translation:"Они необходимы. Ведь если бы учили только о покупающем, я бы сказал: это потому, что он приводит её к святости. Но продающий, который выводит её из святости, — можно было бы сказать: оштрафуем его. Поэтому сообщается нам, что это не так.",explanation:"",rashi:[],tosafot:[]};

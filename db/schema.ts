@@ -19,3 +19,15 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (table) => [uniqueIndex("users_user_id_unique").on(table.userId)]);
+
+// Private editorial queues; never returned from the public articles API.
+export const batches = sqliteTable('editor_batches', {
+  id: text('id').primaryKey(),
+  userId: text('user_id').notNull(),
+  tractate: text('tractate').notNull(),
+  page: text('page').notNull(),
+  stateJson: text('state_json').notNull(),
+  revision: integer('revision').notNull().default(0),
+  writeToken: text('write_token').notNull().default(''),
+  updatedAt: text('updated_at').notNull(),
+}, table=>[uniqueIndex('editor_batches_owner_page').on(table.userId,table.tractate,table.page)]);
