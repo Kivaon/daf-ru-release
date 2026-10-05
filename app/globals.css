@@ -85,3 +85,5 @@
 .batchDialog{inset:0;margin:auto}.batchDialog .batchQueue{display:block;min-width:0;margin:0;padding:16px}.batchDialog .batchQueue button{display:flex;white-space:normal;flex-shrink:0}.batchDialog .batchQueue b{color:inherit}@media(max-width:650px){.batchDialog .batchQueue{display:flex;padding:8px;gap:5px}.batchDialog .batchQueue button{width:130px;min-width:130px}}
 
 .batchDialog .batchQueue span[data-status="Готово"]{color:#23733b}.batchDialog .batchQueue span[data-status="Черновик"]{color:#80502e}.batchDialog .batchQueue span[data-status="Подготовить"]{color:#000}
+
+.batchDialog .batchQueue span[data-status]{font-size:14px;font-weight:600;line-height:1.4}
