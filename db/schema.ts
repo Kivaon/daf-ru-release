@@ -31,3 +31,11 @@ export const batches = sqliteTable('editor_batches', {
   writeToken: text('write_token').notNull().default(''),
   updatedAt: text('updated_at').notNull(),
 }, table=>[uniqueIndex('editor_batches_owner_page').on(table.userId,table.tractate,table.page)]);
+
+// Source-only completeness requirements. No editor or translation content.
+export const mapSources = sqliteTable('translation_map_sources', {
+  tractate: text('tractate').notNull(),
+  page: text('page').notNull(),
+  requirementsJson: text('requirements_json').notNull(),
+  fetchedAt: text('fetched_at').notNull(),
+}, table=>[uniqueIndex('translation_map_sources_page').on(table.tractate,table.page)]);

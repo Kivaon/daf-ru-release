@@ -5,6 +5,7 @@ import { emptyDraft, importDraft, mergeDraft, missingFields } from "./batchModel
 import type { Unit } from "./batchModel";
 import { articleForSelection, readArticleResponse } from "./articleSelection";
 import BatchEditor from "./BatchEditor";
+import {editorLocation} from "./translationMapModel";
 import AboutProject from "./AboutProject";
 import PrintPage from "./PrintPage";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -75,6 +76,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   const [daf, setDaf] = useState(2);
   const [side, setSide] = useState<"a" | "b">("a");
   const [restored, setRestored] = useState(false);
+  const [prepareTarget,setPrepareTarget]=useState('');
   const [segments, setSegments] = useState<DafSegment[]>([]);
   const [comments, setComments] = useState<CommentaryLink[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -109,7 +111,9 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(POSITION_KEY) || "null");
+      const target=editorLocation(window.location.search);
+      if(target){setTractateTitle(target.tractate);setDaf(target.daf);setSide(target.side);setSelectedBlock(`${target.page}:1`);if(target.prepare)setPrepareTarget(`${target.tractate}|${target.page}`);}
+      const saved = target?null:JSON.parse(localStorage.getItem(POSITION_KEY) || "null");
       if (saved && TRACTATES.some((item) => item.sefaria === saved.tractate)) {
         const item = tractateBySefaria(saved.tractate);
         if (Number.isInteger(saved.daf) && saved.daf >= 2 && saved.daf <= item.lastDaf && (saved.side === "a" || saved.side === "b")) {
@@ -348,13 +352,13 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   }, [blockLocated, selected, selectedBlock, tractate, rashi, tosafot, isSpanningUnit, unitRef, unitSegments, unitPages, canEditArticles]);
 
   return <main className={canEditArticles?"editorMode":"readerMode"}>
-    <header className="topbar"><div className="brand"><span className="brandMark">דף</span><span>Daf-Ru</span></div><div className="account">{user?<><span title={user.email}>{user.name}</span>{user.role==="admin"&&<button className="iconButton" onClick={openUsers}>Пользователи</button>}<a className="accountLink" href={signOutHref} target="_top">Выйти</a></>:<a className="signInButton" href={signInHref} target="_top">Войти</a>}<button className="iconButton" onClick={()=>setDictionaryOpen(true)} aria-label="Открыть словарь">⌘ <span>Словарь</span>{words.length>0&&<b>{words.length}</b>}</button><AboutProject /></div></header>
+    <header className="topbar"><div className="brand"><span className="brandMark">דף</span><span>Daf-Ru</span></div><div className="account">{user?<><span title={user.email}>{user.name}</span>{user.role==="admin"&&<button className="iconButton" onClick={openUsers}>Пользователи</button>}<a className="accountLink" href={signOutHref} target="_top">Выйти</a></>:<a className="signInButton" href={signInHref} target="_top">Войти</a>}<button className="iconButton" onClick={()=>setDictionaryOpen(true)} aria-label="Открыть словарь">⌘ <span>Словарь</span>{words.length>0&&<b>{words.length}</b>}</button>{canEditArticles&&<a className="mapNavLink" href="/translation-map">Карта перевода</a>}<AboutProject /></div></header>
     <section className="workspace"><aside className="sourcePane dafPane" onPointerDown={()=>setPicked(null)}>
       <nav className="dafNavigation compactNavigation" aria-label="Навигация по Талмуду"><button disabled={isFirst} onClick={()=>move(-1)} aria-label="Предыдущая страница">←</button><label><select value={tractateTitle} aria-label="Трактат" onChange={(e)=>{setLandingEdge("start");setTractateTitle(e.target.value);setDaf(2);setSide("a");}}>{TRACTATES.map((item)=><option key={item.sefaria} value={item.sefaria}>{item.ru}</option>)}</select></label><label><select value={pageKey} aria-label="Страница" onChange={(e)=>choosePage(e.target.value)}>{pageOptions.map((value)=><option key={value} value={value}>{value.replace("a","а").replace("b","б")}</option>)}</select></label><button disabled={isLast} onClick={()=>move(1)} aria-label="Следующая страница">→</button><div className="zoomControls"><button onClick={()=>setZoom(v=>Math.max(.6,v-.15))} aria-label="Уменьшить">−</button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(v=>Math.min(1.8,v+.15))} aria-label="Увеличить">+</button></div><a className="originalPdfPrint" href={pdfUrl} target="_blank" rel="noopener noreferrer" aria-label="Открыть PDF оригинала страницы для печати" title="Печать оригинала страницы (PDF)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H3v-8h18v8h-3M6 14h12v7H6z"/><path d="M17 11h1"/></svg><span>PDF</span></a></nav>
       <div className="dafViewport">{status==="ready"?<PdfDafViewer zoom={zoom} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={segments} commentary={comments}/>:<div className={`pageDataStatus ${status}`}>{status==="loading"?"Получаем лист и текст…":<><b>Не удалось загрузить лист</b><small>{error}</small></>}</div>}</div>
       <div className="pageGuide compactGuide"><span>Лист: Shas.org / HebrewBooks · текст и связи: Sefaria</span></div>
     </aside><article className="studyPane" onMouseUp={captureSelection}>
-      <div className="studyNavigation"><div><span>{tractate.ru}</span><b>{daf}{side==="a"?"а":"б"}</b>{canEditArticles&&<BatchEditor key={`batch-${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} page={pageKey} label={label} ready={status==="ready"} onSaved={()=>setArticleRetry(value=>value+1)}/>}<PrintPage key={`${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} label={label} segments={segments} context={[...(boundaries.previous?.segments||[]),...segments,...(boundaries.next?.segments||[])]} comments={[...(boundaries.previous?.comments||[]),...comments,...(boundaries.next?.comments||[])]} ready={status==="ready"} /></div><nav aria-label="Соседние страницы">{nearbyPages.map((value)=><button key={value} className={value===pageKey?"active":""} disabled={value===pageKey} onClick={()=>choosePage(value)}>{value.replace("a","а").replace("b","б")}</button>)}</nav></div>
+      <div className="studyNavigation"><div><span>{tractate.ru}</span><b>{daf}{side==="a"?"а":"б"}</b>{canEditArticles&&<BatchEditor key={`batch-${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} page={pageKey} label={label} autoOpen={prepareTarget===`${tractate.sefaria}|${pageKey}`} ready={status==="ready"} onSaved={()=>setArticleRetry(value=>value+1)}/>}<PrintPage key={`${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} label={label} segments={segments} context={[...(boundaries.previous?.segments||[]),...segments,...(boundaries.next?.segments||[])]} comments={[...(boundaries.previous?.comments||[]),...comments,...(boundaries.next?.comments||[])]} ready={status==="ready"} /></div><nav aria-label="Соседние страницы">{nearbyPages.map((value)=><button key={value} className={value===pageKey?"active":""} disabled={value===pageKey} onClick={()=>choosePage(value)}>{value.replace("a","а").replace("b","б")}</button>)}</nav></div>
       <nav className="replyNavigation" aria-label="Соседние реплики"><button disabled={!previousReply} onClick={()=>openReply(previousReply,"previous")}>← <span>Предыдущая реплика</span><b>{previousReply||""}</b></button><button disabled={!nextReply} onClick={()=>openReply(nextReply,"next")}><span>Следующая реплика</span><b>{nextReply||""}</b> →</button></nav>
       {status!=="ready"||!blockLocated?<div className="studyWaiting"><span>{label}</span><h2>Связываем оригинальный лист с текстом Sefaria…</h2><p>Разбор появится после проверки соответствия реплик странице.</p></div>:<>
       {currentArticleLoad?.status==="error"?<div className="articleLoadNotice" role="alert">Не удалось загрузить сохранённый разбор. <button onClick={()=>setArticleRetry(value=>value+1)}>Повторить загрузку</button></div>:!currentArticleLoad&&<p role="status">Загружаем сохранённый разбор…</p>}

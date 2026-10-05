@@ -3,9 +3,9 @@ import { useEffect, useRef, useState } from 'react';
 import { batchPrompt, entryReady, filled, importDraft, mergeDraft, missingFields, readiness } from './batchModel';
 import type { Batch, Draft, Entry } from './batchModel';
 import { readModelResponse } from './responseDiagnostics';
-type Props={tractate:string;page:string;label:string;ready:boolean;onSaved:()=>void};
+type Props={tractate:string;page:string;label:string;ready:boolean;autoOpen?:boolean;onSaved:()=>void};
 const entryLabel=(e:Entry)=>entryReady(e)?'Готово':e.skipped?'Пропущено':e.started?'Черновик':readiness(e.saved).gemara?'Дополнить комментарии':'Подготовить';
-export default function BatchEditor({tractate,page,label,ready,onSaved}:Props){
+export default function BatchEditor({tractate,page,label,ready,autoOpen=false,onSaved}:Props){
  const dialog=useRef<HTMLDialogElement>(null);
  const [batch,setBatch]=useState<Batch|null>(null),[draft,setDraft]=useState<Draft|null>(null),[raw,setRaw]=useState('');
  const [recovery,setRecovery]=useState('');
@@ -20,6 +20,8 @@ export default function BatchEditor({tractate,page,label,ready,onSaved}:Props){
  const call=async(payload:Record<string,unknown>)=>{const response=await fetch('/api/batches',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({tractate,page,...payload})});const data=await response.json() as {batch:Batch;error?:string};if(!response.ok)throw new Error(data.error||'Не удалось сохранить. Повторите попытку.');return data.batch;};
  const load=async()=>{if(pending.current)return;pending.current=true;setBusy(true);setError('');try{const value=await call({action:'start'});if(mounted.current){adopt(value);setNotice('Очередь готова. Выберите статью или продолжайте с текущей.');}}catch(reason){setError(String(reason instanceof Error?reason.message:reason));}finally{pending.current=false;if(mounted.current)setBusy(false);}};
  const open=()=>{bodyOverflow.current=document.body.style.overflow;document.body.style.overflow='hidden';dialog.current?.showModal();void load();};
+ const openedAutomatically=useRef(false);
+ useEffect(()=>{if(autoOpen&&ready&&!openedAutomatically.current){openedAutomatically.current=true;open();}},[autoOpen,ready]);
  const mutate=async(action:string,nextIndex?:number,quiet=false):Promise<boolean>=>{
   if(!batch||!draft||pending.current)return false;pending.current=true;setBusy(true);setError('');const version=editVersion.current;
   try{const value=await call({action,index:batch.index,revision:batch.revision,draft,rawInput:raw,nextIndex});if(!mounted.current)return true;
