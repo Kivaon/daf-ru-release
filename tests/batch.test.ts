@@ -13,7 +13,7 @@ const complete=(u=unit):Draft=>{const d=emptyDraft(u);d.title='Заголово�
 const entry=(u=unit):Entry=>({unit:u,saved:emptyDraft(u),draft:emptyDraft(u),skipped:false,started:false,published:false});
 function database(){
  const sqlite=new DatabaseSync(':memory:');
- for(const file of ['0000_amused_newton_destine','0001_spanning_articles','0002_user_roles','0003_editor_batches'])sqlite.exec(readFileSync(new URL(`../drizzle/${file}.sql`,import.meta.url),'utf8'));
+ for(const file of ['0000_amused_newton_destine','0001_spanning_articles','0002_user_roles','0003_editor_batches','0004_flashy_zaladane','0005_amazing_pet_avengers'])sqlite.exec(readFileSync(new URL(`../drizzle/${file}.sql`,import.meta.url),'utf8'));
  const prepare=(sql:string)=>{let bindings:unknown[]=[];const statement={bind(...v:unknown[]){bindings=v;return statement;},async first(){return sqlite.prepare(sql).get(...bindings as never[])||null;},async all(){return {results:sqlite.prepare(sql).all(...bindings as never[])};},async run(){return {meta:{changes:Number(sqlite.prepare(sql).run(...bindings as never[]).changes)}};}};return statement;};
  const db={prepare,async batch(statements:ReturnType<typeof prepare>[]){sqlite.exec('BEGIN');try{const result=[];for(const statement of statements)result.push(await statement.run());sqlite.exec('COMMIT');return result;}catch(e){sqlite.exec('ROLLBACK');throw e;}}} as unknown as D1Database;
  return {db,sqlite};

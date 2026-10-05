@@ -1,3 +1,4 @@
+import {queueMail} from '../../../db/mailJobs';
 import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { canEdit, registerAndGetRole } from "../../roles";
@@ -43,7 +44,7 @@ export async function POST(request:Request) {
   const targets=unitRef?pages:[{ref,rashi:comments(body.rashi),tosafot:comments(body.tosafot)}];
   const fullTranslation=articleParts.length?articleParts.map((part)=>part.translation).join(" "):translation;
   const statement=`INSERT INTO articles (tractate, ref, title, translation, explanation, unit_ref, parts_json, rashi_json, tosafot_json, provider, author_user_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(tractate, ref) DO UPDATE SET title=excluded.title, translation=excluded.translation, explanation=excluded.explanation, unit_ref=excluded.unit_ref, parts_json=excluded.parts_json, rashi_json=excluded.rashi_json, tosafot_json=excluded.tosafot_json, provider=excluded.provider, author_user_id=excluded.author_user_id, updated_at=excluded.updated_at`;
-  await env.DB.batch(targets.map((target)=>env.DB.prepare(statement).bind(tractate,target.ref,title,fullTranslation,explanation,unitRef||null,JSON.stringify(articleParts),JSON.stringify(target.rashi),JSON.stringify(target.tosafot),provider,user.userId,now,now)));
+  await env.DB.batch([queueMail(env.DB,tractate,targets.map(t=>t.ref)),...targets.map((target)=>env.DB.prepare(statement).bind(tractate,target.ref,title,fullTranslation,explanation,unitRef||null,JSON.stringify(articleParts),JSON.stringify(target.rashi),JSON.stringify(target.tosafot),provider,user.userId,now,now))]);
   const current=targets.find((target)=>target.ref===ref)||targets[0];
   return Response.json({ok:true,article:{ref:current.ref,title,translation:fullTranslation,explanation,unitRef:unitRef||undefined,parts:articleParts,rashi:current.rashi,tosafot:current.tosafot,provider,createdAt:now,updatedAt:now},savedRefs:targets.map((target)=>target.ref)});
 }

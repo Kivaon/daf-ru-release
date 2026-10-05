@@ -49,3 +49,12 @@ DAF-RU помогает русскоязычному ученику предва
 - Миграция 0004 создаёт translation_map_sources. Она хранит только refs ожидаемых комментариев, не тексты редакторов. Кэш заполняется для страниц с опубликованными статьями, чтобы отсутствие комментариев не выводилось из отсутствия перевода.
 
 Известные лакуны исходной модели: Shekalim не разрешается Sefaria; Nazir 33b пуст в выбранном Wikisource. Остальные 129 сторон Назира имеют индекс. Карта показывает частичный итог, а не выдумывает знаменатель. Для обновления исходного корпуса повторно запустить scripts/refresh-source-index.py, проверить изменения и публиковать. При изменении refs комментариев отдельно инвалидировать соответствующий source-only кэш; существующие статьи не трогать.
+
+
+## Mailjet notifications (2026-10-06)
+- Recipient and confirmed sender: pitronot@proton.me. Server-only MAILJET_API_KEY / MAILJET_SECRET_KEY in Sites secrets; never copy to source or browser.
+- Both single and batch publication atomically register a mail_jobs record before article writes. Initial article snapshot and canonical sorted refs deduplicate first completion, including composite units. Private drafts do not enqueue.
+- Completion uses the translation-map source requirements (Gemara and all source Rashi/Tosafot). Previously complete articles are suppressed; future edits do not resend. No review status added.
+- Worker waitUntil processes one due job per page/API visit. Errors do not undo article saves. Retries have backoff and run on later visits, not an unattended timer; if the site is idle, retries wait. Mailjet CustomCampaign + DeduplicateCampaign protect retries from duplicate delivery.
+- Admin-only /notifications sends one deduplicated connection-test email; /api/notifications GET reports recent job states/errors without secrets. Provider acceptance does not prove inbox delivery.
+- Verification: 52 tests passed, typecheck passed, local migration applied. Production build and Mailjet connection-test result recorded below after publication.

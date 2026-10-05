@@ -1,3 +1,4 @@
+import {queueMail} from './mailJobs.ts';
 import { filled, emptyDraft, importDraft, mergeDraft, savedDraft, missingFields, nextPending } from '../app/batchModel.ts';
 import type { Batch, SavedRow, Unit } from '../app/batchModel.ts';
 export class BatchError extends Error { status:number;constructor(message:string,status=400){super(message);this.status=status;} }
@@ -43,6 +44,7 @@ export async function changeBatch(db:D1Database,userId:string,input:{tractate:st
   for(const ref of refs){const values=rows.flatMap(r=>{const parts=JSON.parse(r.parts_json||'[]') as {ref:string;translation:string}[];return [...parts.filter(p=>p.ref===ref).map(p=>p.translation),...(r.ref===ref&&!r.unit_ref?[r.translation]:[])];}).filter(filled);if(new Set(values).size>1)throw new BatchError('Сохранённые копии перевода расходятся. Согласуйте их в обычном редакторе перед дополнением пакета.',409);}
   guards=refs.map(()=> ' AND (SELECT updated_at FROM articles WHERE tractate=? AND ref=?) IS ?').join('');
   guardValues=refs.flatMap(ref=>[state.tractate,ref,rows.find(r=>r.ref===ref)?.updated_at??null]);
+  statements.push(queueMail(db,state.tractate,refs,`EXISTS (SELECT 1 FROM editor_batches WHERE ${ownerClause})`,[userId,state.tractate,state.page,revision,token]));
   const sql=`INSERT INTO articles (tractate,ref,title,translation,explanation,unit_ref,parts_json,rashi_json,tosafot_json,provider,author_user_id,created_at,updated_at)
    SELECT ?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS (SELECT 1 FROM editor_batches WHERE ${ownerClause})
    ON CONFLICT(tractate,ref) DO UPDATE SET title=excluded.title,translation=excluded.translation,explanation=excluded.explanation,unit_ref=excluded.unit_ref,parts_json=excluded.parts_json,rashi_json=excluded.rashi_json,tosafot_json=excluded.tosafot_json,provider=excluded.provider,author_user_id=excluded.author_user_id,updated_at=excluded.updated_at`;

@@ -57,3 +57,14 @@
 Denominator: 81574 подтверждённых refs в Sefaria Wikisource; глобальный объём неполон из-за Shekalim и Nazir 33b, честно показано в UI. 129 доступных сторон Назира сохранены. Для составной статьи готовность проверяется на обеих сторонах; единица карты — физический ref, а не уникальный unit_ref. Черновики всех редакторов объединены по ref, без выдачи личного текста. Неполные опубликованные строки тоже розовые. Открытие пустого пакета не считается работой.
 
 Миграция 0004 schema-only проверена и применена локально. SQL-агрегаты защищены editor/admin, анонимный API 401, reader 403. 48 тестов прошли; typecheck прошёл. Браузер подтвердил sticky top/left, scrollWidth16700 и 5374 ссылки. Локальные тестовые данные не переносить в production. Email и Ready for review не добавлялись. Публикация после окончательной сборки.
+
+Карта опубликована: версия 73, succeeded, commit 021a8cecf7e9900d0594b3f8d060cb830aad023f. Typecheck и production build прошли. Основная папка синхронизирована по изменённым файлам без изменения Git HEAD.
+
+
+## Mailjet notifications (2026-10-06)
+- Recipient and confirmed sender: pitronot@proton.me. Server-only MAILJET_API_KEY / MAILJET_SECRET_KEY in Sites secrets; never copy to source or browser.
+- Both single and batch publication atomically register a mail_jobs record before article writes. Initial article snapshot and canonical sorted refs deduplicate first completion, including composite units. Private drafts do not enqueue.
+- Completion uses the translation-map source requirements (Gemara and all source Rashi/Tosafot). Previously complete articles are suppressed; future edits do not resend. No review status added.
+- Worker waitUntil processes one due job per page/API visit. Errors do not undo article saves. Retries have backoff and run on later visits, not an unattended timer; if the site is idle, retries wait. Mailjet CustomCampaign + DeduplicateCampaign protect retries from duplicate delivery.
+- Admin-only /notifications sends one deduplicated connection-test email; /api/notifications GET reports recent job states/errors without secrets. Provider acceptance does not prove inbox delivery.
+- Verification: 52 tests passed, typecheck passed, local migration applied. Production build and Mailjet connection-test result recorded below after publication.

@@ -8,5 +8,5 @@ export default async function AdminPage(){
   const user=await getChatGPTUser();
   if(!user)redirect("/signin-with-chatgpt?return_to=%2Fadmin");
   if(await registerAndGetRole(user)!=="admin")redirect("/");
-  return <AdminClient/>;
+  return <><p style={{padding:"1rem 2rem"}}><a href="/notifications">Почтовые уведомления</a></p><AdminClient/></>;
 }

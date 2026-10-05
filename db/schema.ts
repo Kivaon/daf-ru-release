@@ -39,3 +39,11 @@ export const mapSources = sqliteTable('translation_map_sources', {
   requirementsJson: text('requirements_json').notNull(),
   fetchedAt: text('fetched_at').notNull(),
 }, table=>[uniqueIndex('translation_map_sources_page').on(table.tractate,table.page)]);
+
+// Durable first-completion notifications, including the state before the first save.
+export const mailJobs = sqliteTable('mail_jobs', {
+ id:text('id').primaryKey(), tractate:text('tractate').notNull(), refsJson:text('refs_json').notNull(),
+ beforeJson:text('before_json').notNull(), status:text('status').notNull().default('pending'),
+ nextAt:integer('next_at').notNull().default(0), attempts:integer('attempts').notNull().default(0),
+ lease:text('lease'), messageId:text('message_id'), error:text('error'), createdAt:text('created_at').notNull(),
+});
