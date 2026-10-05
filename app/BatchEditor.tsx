@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { batchPrompt, entryReady, filled, importDraft, mergeDraft, missingFields, readiness } from './batchModel';
 import type { Batch, Draft, Entry } from './batchModel';
-import { parseModelResponse } from './parseModelResponse';
+import { parseModelResponse, suggestClosingBrackets } from './parseModelResponse';
 type Props={tractate:string;page:string;label:string;ready:boolean;onSaved:()=>void};
 const entryLabel=(e:Entry)=>entryReady(e)?'Готово':e.skipped?'Пропущено':e.started?'Черновик':readiness(e.saved).gemara?'Дополнить комментарии':'Подготовить';
 export default function BatchEditor({tractate,page,label,ready,onSaved}:Props){
@@ -37,6 +37,7 @@ export default function BatchEditor({tractate,page,label,ready,onSaved}:Props){
  const done=batch?.entries.filter(entryReady).length||0,skipped=batch?.entries.filter(e=>!entryReady(e)&&e.skipped).length||0;
  const partial=batch?.entries.filter(e=>!entryReady(e)&&readiness(e.saved).gemara).length||0;
  const draftReady=draft?readiness(draft):null;
+ const repair=importError?suggestClosingBrackets(raw):null;
  const complete=!!batch&&done===batch.entries.length;
  const locked=(value:string|undefined)=>filled(value);
  return <>
@@ -55,6 +56,7 @@ export default function BatchEditor({tractate,page,label,ready,onSaved}:Props){
      {promptOpen&&<label>Задание для копирования<textarea readOnly value={batchPrompt(tractate,{...entry,draft})}/></label>}
      <label>2. Вставьте ответ AI<textarea className="batchImport" value={raw} onChange={e=>paste(e.target.value)} placeholder="JSON разбирается автоматически после вставки"/></label>
      {importError&&<p className="batchImportError" role="alert">{importError}. Ответ сохранится как черновик; исправьте его перед публикацией.</p>}
+     {repair&&<div className="batchHint"><p>В конце ответа не закрыты скобки. Можно добавить только <code>{repair.suffix}</code>; текст останется прежним. Проверьте полноту материала.</p><button type="button" className="batchCopy" onClick={()=>paste(repair.text)}>Добавить закрывающие скобки и разобрать</button></div>}
      <label>Заголовок<input readOnly={locked(entry.saved.title)} value={draft.title} onChange={e=>edit(d=>{d.title=e.target.value;})}/></label>
      {draft.parts.map((p,i)=><label key={p.ref}>Перевод {p.ref}<textarea readOnly={locked(entry.saved.parts.find(x=>x.ref===p.ref)?.translation)} value={p.translation} onChange={e=>edit(d=>{d.parts[i].translation=e.target.value;})}/></label>)}
      <label>Общее объяснение Гемары<textarea readOnly={locked(entry.saved.explanation)} value={draft.explanation} onChange={e=>edit(d=>{d.explanation=e.target.value;})}/></label>
