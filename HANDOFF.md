@@ -68,3 +68,7 @@ Denominator: 81574 подтверждённых refs в Sefaria Wikisource; гл
 - Worker waitUntil processes one due job per page/API visit. Errors do not undo article saves. Retries have backoff and run on later visits, not an unattended timer; if the site is idle, retries wait. Mailjet CustomCampaign + DeduplicateCampaign protect retries from duplicate delivery.
 - Admin-only /notifications sends one deduplicated connection-test email; /api/notifications GET reports recent job states/errors without secrets. Provider acceptance does not prove inbox delivery.
 - Verification: 52 tests passed, typecheck passed, local migration applied. Production build and Mailjet connection-test result recorded below after publication.
+
+Release confirmed: live version 74, commit 3fe2568b83c192b2514f7e67fe98fdb374968623, Sites env revision 2, deployment appgdep_6ac419a87ff08191bf2b3ebb8ee27fb4 succeeded. Build passed. Production admin /notifications test POST accepted by Mailjet; UI displayed acceptance. Inbox delivery awaits user's observation. No article was created for this test. Original checkout synchronized (18 files), backup in current task work/before-mailjet-sync.
+
+Sender changed at user request to kivaon@gmail.com; both sender addresses confirmed by user. Recipient remains pitronot@proton.me. Test campaign connection-test-gmail-v2 permits one fresh test without replaying existing article notifications. Prior inbox delivery NOT confirmed: user only found activation messages.

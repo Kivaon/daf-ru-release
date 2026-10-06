@@ -18,7 +18,7 @@ export async function sendMail(config:MailConfig,id:string,subject:string,body:s
  if(!config.MAILJET_API_KEY||!config.MAILJET_SECRET_KEY)throw new Error('Mailjet: ключи не настроены');
  const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(id));
  const campaign='dafru-'+Array.from(new Uint8Array(digest),x=>x.toString(16).padStart(2,'0')).join('');
- const response=await fetcher('https://api.mailjet.com/v3.1/send',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Basic '+btoa(config.MAILJET_API_KEY+':'+config.MAILJET_SECRET_KEY)},signal:AbortSignal.timeout(10000),body:JSON.stringify({Messages:[{From:{Email:'pitronot@proton.me',Name:'DAF-RU'},To:[{Email:'pitronot@proton.me'}],Subject:subject,TextPart:body,CustomCampaign:campaign,DeduplicateCampaign:true}]})});
+ const response=await fetcher('https://api.mailjet.com/v3.1/send',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Basic '+btoa(config.MAILJET_API_KEY+':'+config.MAILJET_SECRET_KEY)},signal:AbortSignal.timeout(10000),body:JSON.stringify({Messages:[{From:{Email:'kivaon@gmail.com',Name:'DAF-RU'},To:[{Email:'pitronot@proton.me'}],Subject:subject,TextPart:body,CustomCampaign:campaign,DeduplicateCampaign:true}]})});
  const result=await response.json() as {Messages?:{Status:string;To?:{MessageUUID?:string}[];Errors?:{ErrorCode?:string;ErrorMessage?:string}[]}[]};
  const message=result.Messages?.[0];
  if(!response.ok||message?.Status!=='success')throw new Error('Mailjet '+response.status+': '+(message?.Errors?.map(e=>e.ErrorCode||e.ErrorMessage).join('; ')||'отправка не подтверждена').slice(0,300));
