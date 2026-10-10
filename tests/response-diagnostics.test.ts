@@ -23,3 +23,33 @@ test('valid and smart-quoted responses preserve text, schema errors name the fie
  assert.throws(()=>importDraft(unit,{rashi:[{ref:'foreign'}]},emptyDraft(unit)),/отсутствует в источниках/);
  assert.throws(()=>importDraft(unit,{rashi:[{ref:'Rashi on Pesachim 2a:2:1'},{ref:'Rashi on Pesachim 2a:2:1'}]},emptyDraft(unit)),/Повторяется ref/);
 });
+
+test('copy/paste framing and non-JSON spaces recover only outside text',()=>{
+ const title='עברית «слова» “слова”\u00a0\u202f\u200b\u200f😀';
+ const strict=JSON.stringify({title});
+ for(const raw of ['\ufeff'+strict,'```json\r\n'+strict+'\r\n```','```\n'+strict+'\n```','{\u00a0\u202f"title":'+JSON.stringify(title)+'}']){
+  const result=readModelResponse(raw);assert.deepEqual(result.value,{title});assert.ok(result.recoveredText);assert.deepEqual(JSON.parse(result.recoveredText),{title});
+ }
+ assert.deepEqual(readModelResponse(strict),{value:{title},suffix:''});
+});
+test('combined BOM, fence, smart quotes, unusual spaces and missing brackets recover together',()=>{
+ const raw='\ufeff```json\n{\u00a0“title”:”Текст”,“parts”:[{“ref”:“2a:2”,“translation”:“«слова»”}\n```';
+ const result=readModelResponse(raw);assert.equal(result.suffix,']}');
+ assert.deepEqual(result.value,{title:'Текст',parts:[{ref:'2a:2',translation:'«слова»'}]});
+ assert.deepEqual(JSON.parse(result.recoveredText!),result.value);
+ assert.equal(importDraft(unit,result.value,emptyDraft(unit)).title,'Текст');
+});
+test('duplicate fields including escaped equivalents are rejected before values can be lost',()=>{
+ for(const raw of ['{"title":"a","title":"b"}','{"title":"a","\\u0074itle":"b"}','{“title”:“a”,“title”:“b”}','```json\n{"x":[{"ref":"a","ref":"b"}]}\n```','{"title":"a","title":"b"'])assert.throws(()=>readModelResponse(raw),/Повторяется поле/);
+ assert.deepEqual(readModelResponse('{"a":{"ref":"x"},"b":{"ref":"y"}}').value,{a:{ref:'x'},b:{ref:'y'}});
+});
+test('invisible syntax characters report code and position but remain legal inside text',()=>{
+ for(const char of ['\u200b','\u200e','\u200f','\u2060','\u202e','\u2067']){
+  assert.throws(()=>readModelResponse('{'+char+'"title":"x"}'),new RegExp('U\\+'+char.charCodeAt(0).toString(16).toUpperCase()));
+  assert.deepEqual(readModelResponse(JSON.stringify({title:char})).value,{title:char});
+ }
+ assert.match(diagnoseResponse('{\u00a0"title":"x"}'),/неразрывный пробел.*U\+00A0/);
+});
+test('ambiguous quotation, prose, escapes, truncation and multiple fences stay rejected',()=>{
+ for(const raw of ['Вот JSON:\n{"title":"x"}','```json\n{}\n```\n```json\n{}\n```','{"title”:"x”}','{„title“:„x“}','{"title":"a\\q"}','{"title":"a\nb"}','{“title”:“обрыв','{"title":"x",}'])assert.throws(()=>readModelResponse(raw));
+});

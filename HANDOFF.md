@@ -82,3 +82,8 @@ Root cause: old parser only opened smart strings with “ and closed with ”. T
 Batch paste and old-draft adoption normalize recovered raw once before autosave, so reopening does not reapply raw over manual edits. Single import also uses the same readModelResponse → parseModelResponse → importDraft path.
 
 Verification: 55 tests pass, typecheck passes. Exact tests/fixtures/chullin-105b-phone.txt passes parsing, schema, draft save/reopen and changeBatch publication. Local browser with actual Sefaria Chullin 105b: pasted exact fixture into item 9, all fields populated, clicked Save and next; status Ready, 1/19, moved to item 10. GET /api/articles confirms exact title/translation and two Rashi, zero Tosafot. Single-ref database storage flattens parts into translation (existing behavior), while parsed response retains parts.length=1 and pages.length=1. QA used isolated local DB only.
+
+Published v76, succeeded, commit e9ef95c61c767a5748a1932e96202172320a0dca. Production build passed.
+
+## 2026-10-10 — combined copy/paste recovery
+Existing recovery now composes BOM/fence cleanup, outside-string whitespace normalization, smart quotes and safe closing suffix. Existing diagnostics walker rejects duplicate fields before import and identifies invisible syntax characters with code/position. Batch recovery notice is generalized. 61 tests and typecheck pass, including original and damaged Chullin fixtures through schema, draft save/reopen and real changeBatch publication with isolated SQLite. No new browser run in this follow-up; prior v76 UI path remains unchanged apart from notification wording. Deferred geometry WIP excluded.

@@ -9,6 +9,18 @@ export function parseModelResponse(text: string, onRecovered?: (text:string)=>vo
     return JSON.parse(text);
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
+    const recovered=recoverResponseSyntax(text);
+    const value=JSON.parse(recovered);
+    onRecovered?.(recovered);
+    return value;
+  }
+}
+
+/** Normalize only response framing and syntax outside quoted text. */
+export function recoverResponseSyntax(input:string):string {
+    let text=input.replace(/^\uFEFF/, '');
+    const fence=text.trim().match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
+    if(fence && !fence[1].includes('```')) text=fence[1];
     let mode: "outside" | "ascii" | "smart" = "outside";
     let depth = 0;
     let recovered = "";
@@ -19,6 +31,7 @@ export function parseModelResponse(text: string, onRecovered?: (text:string)=>vo
         continue;
       }
       if (mode === "outside") {
+        if (/[^\S\r\n\t ]/u.test(char)) { recovered += " "; continue; }
         if (char === '"') mode = "ascii";
         if (char === "“" || char === "”") {
           mode = "smart";
@@ -40,11 +53,8 @@ export function parseModelResponse(text: string, onRecovered?: (text:string)=>vo
       }
       recovered += char;
     }
-    if (mode !== "outside" || depth !== 0) throw error;
-    const value=JSON.parse(recovered);
-    onRecovered?.(recovered);
-    return value;
-  }
+    if (mode !== "outside" || depth !== 0) throw new SyntaxError("Unclosed quotation");
+    return recovered;
 }
 
 /** Suggest only a closing suffix, never complete a string, literal or missing value.

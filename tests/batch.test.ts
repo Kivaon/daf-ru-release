@@ -98,9 +98,10 @@ test('an intervening article write aborts publication and preserves session revi
  const rows=await articleRows(db,'Bekhorot',['2a:9','2b:1']);assert.equal(rows.length,1);assert.equal(rows[0].title,'Concurrent');assert.equal((await getBatch(db,'alice','Bekhorot','2a'))!.revision,0);
 });
 
-test('real phone response traverses recovery, schema validation, private save, reopen and publication',async()=>{
+for(const decorated of [false,true]) test(`real phone response ${decorated?'with combined copy/paste damage':''} traverses recovery, schema validation, private save, reopen and publication`,async()=>{
  const {readModelResponse}=await import('../app/responseDiagnostics.ts');
- const raw=readFileSync(new URL('./fixtures/chullin-105b-phone.txt',import.meta.url),'utf8');
+ const fixture=readFileSync(new URL('./fixtures/chullin-105b-phone.txt',import.meta.url),'utf8');
+ const raw=decorated?'\ufeff```json\n'+fixture.trim().slice(0,-2).replace('{','{\u00a0')+'\n```':fixture;
  const u:Unit={id:'Chullin 105b:9',boundary:false,parts:[{ref:'105b:9',original:'מקור',rashi:[1,2].map(n=>({ref:`Rashi on Chullin 105b:9:${n}`,original:'רשי'})),tosafot:[]}]};
  const parsed=readModelResponse(raw);assert.ok(parsed.recoveredText);assert.deepEqual(JSON.parse(parsed.recoveredText!),parsed.value);
  const imported=importDraft(u,parsed.value,emptyDraft(u));assert.deepEqual(missingFields(imported),[]);

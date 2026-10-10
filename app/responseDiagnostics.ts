@@ -1,19 +1,37 @@
-import {parseModelResponse, suggestClosingBrackets} from './parseModelResponse.ts';
+import {parseModelResponse, suggestClosingBrackets, recoverResponseSyntax} from './parseModelResponse.ts';
 
 /** Recovery is syntactic only; callers still validate refs and article completeness. */
 export function readModelResponse(text:string){
- try{let recoveredText:string|undefined;const value=parseModelResponse(text,recovered=>{recoveredText=recovered;});return {value,suffix:'',...(recoveredText?{recoveredText}:{})};}catch{
-  const repair=suggestClosingBrackets(text);
-  if(repair)return {value:JSON.parse(repair.text) as unknown,suffix:repair.suffix};
-  throw new Error(diagnoseResponse(text));
+ let recoveredText:string|undefined,value:unknown,suffix='';
+ try {value=parseModelResponse(text,recovered=>{recoveredText=recovered;});}
+ catch {
+  let candidate=text;
+  try {candidate=recoverResponseSyntax(text);} catch { /* diagnose original malformed quotes */ }
+  const repair=suggestClosingBrackets(candidate);
+  if(!repair)throw new Error(diagnoseResponse(candidate));
+  value=JSON.parse(repair.text);suffix=repair.suffix;
+  if(candidate!==text)recoveredText=repair.text;
  }
+ // JSON.parse silently discards duplicate keys. Inspect the same accepted source
+ // before schema import so no text is lost, including escaped equivalent keys.
+ const diagnostic=diagnoseResponse(recoveredText ?? text+suffix,true);
+ if(diagnostic)throw new Error(diagnostic);
+ return {value,suffix,...(recoveredText?{recoveredText}:{})};
 }
 
 /** Deterministic JSON grammar walk, independent of Safari/V8 error wording. */
-export function diagnoseResponse(text:string):string{
+export function diagnoseResponse(text:string,validate=false):string{
  let i=0;
  const scopes:{ref?:string}[]=[];
- const whitespace=()=>{while(i<text.length&&/\s/.test(text[i]))i++;};
+ const whitespace=()=>{
+  while(i<text.length){
+   const char=text[i];
+   if(/[ \t\r\n]/.test(char)){i++;continue;}
+   const names:Record<string,string>={'\u00a0':'неразрывный пробел','\u202f':'узкий неразрывный пробел','\ufeff':'BOM','\u200b':'пробел нулевой ширины','\u200c':'невидимый разделитель','\u200d':'невидимый соединитель','\u200e':'маркер направления слева направо','\u200f':'маркер направления справа налево','\u2060':'невидимый соединитель слов'};
+   if(names[char] || /[\u202a-\u202e\u2066-\u2069]/.test(char) || /\s/.test(char))fail(`Недопустимый символ вне текста: ${names[char]||'пробельный символ или маркер направления'} (U+${char.charCodeAt(0).toString(16).toUpperCase().padStart(4,'0')}). Удалите его между полями JSON.`, '');
+   break;
+  }
+ };
  const fail=(message:string,path:string,position=i):never=>{
   const before=text.slice(0,position),line=before.split('\n').length,column=position-(before.lastIndexOf('\n')+1)+1;
   const ref=[...scopes].reverse().find(s=>s.ref)?.ref;
@@ -40,13 +58,13 @@ export function diagnoseResponse(text:string):string{
   if(ch==='"')return string(path);
   if(ch==='{'||ch==='['){
    const object=ch==='{',close=object?'}':']';i++;whitespace();
-   const scope:{ref?:string}={};scopes.push(scope);let index=0;
+   const scope:{ref?:string}={};scopes.push(scope);let index=0;const keys=new Set<string>();
    if(text[i]===close){i++;scopes.pop();return;}
    while(true){
     whitespace();if(i>=text.length)fail(`Ответ оборван: ожидается ${object?'поле в кавычках':'элемент массива'} или закрывающая скобка ${close}.`,path);
     if(text[i]==='}'||text[i]===']')fail(`Лишняя или несовпадающая скобка «${text[i]}»; ожидается ${object?'поле':'значение'}.`,path);
     let key='';
-    if(object){if(text[i]!=='"')fail('Название поля должно быть в двойных кавычках.',path);key=string(path);whitespace();if(text[i]!==':')fail('После названия поля ожидается двоеточие «:».',path?`${path}.${key}`:key);i++;}
+    if(object){if(text[i]!=='"')fail('Название поля должно быть в двойных кавычках.',path);const keyPosition=i;key=string(path);if(keys.has(key))fail(`Повторяется поле «${key}». Объедините или удалите повтор; значения автоматически не заменяются.`,path?`${path}.${key}`:key,keyPosition);keys.add(key);whitespace();if(text[i]!==':')fail('После названия поля ожидается двоеточие «:».',path?`${path}.${key}`:key);i++;}
     const child=object?(path?`${path}.${key}`:key):`${path}[${index}]`;
     const result=value(child,depth+1);if(object&&key==='ref'&&typeof result==='string')scope.ref=result;
     whitespace();if(text[i]===close){i++;scopes.pop();return;}
@@ -67,5 +85,5 @@ export function diagnoseResponse(text:string):string{
   if(text.trimStart().startsWith('```'))return 'Ответ обёрнут в Markdown. Скопируйте только JSON между строками с ```.';
   value('',0);whitespace();if(i<text.length)fail('После JSON есть лишний текст или закрывающая скобка.','');
  }catch(error){return error instanceof Error?error.message:'Не удалось разобрать JSON.';}
- return 'Не удалось разобрать JSON. Проверьте кавычки и структуру ответа.';
+ return validate?'':'Не удалось разобрать JSON. Проверьте кавычки и структуру ответа.';
 }
