@@ -2,7 +2,7 @@ import {parseModelResponse, suggestClosingBrackets} from './parseModelResponse.t
 
 /** Recovery is syntactic only; callers still validate refs and article completeness. */
 export function readModelResponse(text:string){
- try{return {value:parseModelResponse(text),suffix:''};}catch{
+ try{let recoveredText:string|undefined;const value=parseModelResponse(text,recovered=>{recoveredText=recovered;});return {value,suffix:'',...(recoveredText?{recoveredText}:{})};}catch{
   const repair=suggestClosingBrackets(text);
   if(repair)return {value:JSON.parse(repair.text) as unknown,suffix:repair.suffix};
   throw new Error(diagnoseResponse(text));

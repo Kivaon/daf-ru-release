@@ -97,3 +97,17 @@ test('an intervening article write aborts publication and preserves session revi
  await assert.rejects(changeBatch(db,'alice',{tractate:'Bekhorot',page:'2a',index:0,revision:0,action:'publish',draft:complete()}),/Материал изменился/);
  const rows=await articleRows(db,'Bekhorot',['2a:9','2b:1']);assert.equal(rows.length,1);assert.equal(rows[0].title,'Concurrent');assert.equal((await getBatch(db,'alice','Bekhorot','2a'))!.revision,0);
 });
+
+test('real phone response traverses recovery, schema validation, private save, reopen and publication',async()=>{
+ const {readModelResponse}=await import('../app/responseDiagnostics.ts');
+ const raw=readFileSync(new URL('./fixtures/chullin-105b-phone.txt',import.meta.url),'utf8');
+ const u:Unit={id:'Chullin 105b:9',boundary:false,parts:[{ref:'105b:9',original:'מקור',rashi:[1,2].map(n=>({ref:`Rashi on Chullin 105b:9:${n}`,original:'רשי'})),tosafot:[]}]};
+ const parsed=readModelResponse(raw);assert.ok(parsed.recoveredText);assert.deepEqual(JSON.parse(parsed.recoveredText!),parsed.value);
+ const imported=importDraft(u,parsed.value,emptyDraft(u));assert.deepEqual(missingFields(imported),[]);
+ const {db}=database();await createBatch(db,'phone-editor','Chullin','105b',[u]);
+ await changeBatch(db,'phone-editor',{tractate:'Chullin',page:'105b',action:'draft',index:0,revision:0,draft:imported,rawInput:parsed.recoveredText});
+ const reopened=(await getBatch(db,'phone-editor','Chullin','105b'))!;assert.equal(reopened.entries[0].draft.pages[0].rashi.length,2);assert.equal(readModelResponse(reopened.entries[0].rawInput!).recoveredText,undefined);
+ await changeBatch(db,'phone-editor',{tractate:'Chullin',page:'105b',action:'publish',index:0,revision:1,draft:reopened.entries[0].draft});
+ const rows=await articleRows(db,'Chullin',['105b:9']);assert.equal(rows.length,1);assert.equal(rows[0].title,imported.title);assert.deepEqual(JSON.parse(rows[0].rashi_json),imported.pages[0].rashi);assert.deepEqual(JSON.parse(rows[0].tosafot_json),[]);
+ const wrong=structuredClone(parsed.value) as {pages:{rashi:{ref:string}[]}[]};wrong.pages[0].rashi[0].ref='Rashi on Chullin 105b:99:1';assert.throws(()=>importDraft(u,wrong,emptyDraft(u)),/отсутствует в источниках/);
+});

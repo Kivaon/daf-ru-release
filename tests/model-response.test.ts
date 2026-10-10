@@ -58,3 +58,15 @@ test("truncated input, unmatched quotations and unrelated syntax errors are reje
     '{"text":"обычный",}',
   ]) assert.throws(() => parseModelResponse(input), SyntaxError);
 });
+
+test('exact Chullin phone response recovers inconsistent opening orientations',()=>{
+ const input=readFileSync(new URL('./fixtures/chullin-105b-phone.txt',import.meta.url),'utf8');
+ const result=parseModelResponse(input) as {title:string;parts:unknown[];pages:{rashi:{translation:string}[];tosafot:unknown[]}[]};
+ assert.equal(result.title,'Хулин 105b:9 — Убирать крошки, чтобы избежать бедности');
+ assert.equal(result.parts.length,1);assert.equal(result.pages.length,1);assert.equal(result.pages[0].rashi.length,2);assert.equal(result.pages[0].tosafot.length,0);
+ assert.equal(result.pages[0].rashi[0].translation,'«Собирают крошки» — подметают из дома крошки пищи.');
+});
+test('structural smart quotes use position rather than orientation; internal quotations and escapes survive',()=>{
+ for(const input of ['{“key”:”value”}','{”key“:“value“}','{”key”:”value”}','{“key”:“value”}'])assert.deepEqual(parseModelResponse(input),{key:'value'});
+ assert.deepEqual(parseModelResponse('{“key”:”Текст “слова” и «слова» и \\"ASCII\\".”}'),{key:'Текст “слова” и «слова» и "ASCII".'});
+});

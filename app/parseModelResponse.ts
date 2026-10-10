@@ -1,10 +1,10 @@
 /**
- * Keep valid JSON byte-for-byte on the standard path. On failure, accept paired
- * smart delimiters, preserving balanced smart quotations inside those strings.
+ * Keep valid JSON byte-for-byte on the standard path. On failure, accept context-delimited
+ * smart strings, preserving balanced smart quotations inside those strings.
  * ASCII-delimited strings and JSON escapes are copied unchanged. Malformed or
  * unmatched quotes are rejected rather than guessing at missing delimiters.
  */
-export function parseModelResponse(text: string): unknown {
+export function parseModelResponse(text: string, onRecovered?: (text:string)=>void): unknown {
   try {
     return JSON.parse(text);
   } catch (error) {
@@ -20,28 +20,30 @@ export function parseModelResponse(text: string): unknown {
       }
       if (mode === "outside") {
         if (char === '"') mode = "ascii";
-        if (char === "“") {
+        if (char === "“" || char === "”") {
           mode = "smart";
           recovered += '"';
           continue;
         }
       } else if (mode === "ascii") {
         if (char === '"') mode = "outside";
-      } else {
-        if (char === "“") depth++;
-        if (char === "”") {
-          if (depth > 0) depth--;
-          else {
-            mode = "outside";
-            recovered += '"';
-            continue;
-          }
+      } else if (char === "“" || char === "”") {
+        // Either smart glyph may close a JSON token, but only at a JSON
+        // boundary. Balanced typographic quotations inside the token remain text.
+        const following=text.slice(i+1).match(/^\s*(.)/)?.[1];
+        const boundary=following===undefined||':,}]'.includes(following);
+        if ((char === "“" || char === "”") && depth===0 && boundary) {
+          mode="outside";recovered+='"';continue;
         }
+        if (char === "“") depth++;
+        if (char === "”" && depth>0) depth--;
       }
       recovered += char;
     }
     if (mode !== "outside" || depth !== 0) throw error;
-    return JSON.parse(recovered);
+    const value=JSON.parse(recovered);
+    onRecovered?.(recovered);
+    return value;
   }
 }
 

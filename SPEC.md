@@ -74,3 +74,6 @@ UI добавляет tractate, выбранный ref, provider и unitRef. П�
 - Worker waitUntil processes one due job per page/API visit. Errors do not undo article saves. Retries have backoff and run on later visits, not an unattended timer; if the site is idle, retries wait. Mailjet CustomCampaign + DeduplicateCampaign protect retries from duplicate delivery.
 - Admin-only /notifications sends one deduplicated connection-test email; /api/notifications GET reports recent job states/errors without secrets. Provider acceptance does not prove inbox delivery.
 - Verification: 52 tests passed, typecheck passed, local migration applied. Production build and Mailjet connection-test result recorded below after publication.
+
+### JSON recovery: phone quotation marks
+Valid strict JSON must be returned unchanged. On failure the existing parser may recognize either Unicode smart quote as a structural delimiter at a JSON boundary, independently of orientation. Preserve typographic quotations inside text, guillemets and ASCII escapes. Parse repaired text with JSON.parse and then validate using normal importDraft schema/ref checks. Normalize repaired raw once before draft autosave; reopening must not overwrite later manual form edits. Do not use global quote replacement.

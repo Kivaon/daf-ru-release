@@ -249,6 +249,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   const copyPrompt = async () => { try { await navigator.clipboard.writeText(promptForAI()); setCopied(true);setEditorMessage("");window.setTimeout(()=>setCopied(false),1800); } catch { setEditorMessage("Браузер не разрешил копирование. Выделите задание вручную."); } };
   const parseImport = (text=importText) => { if(!draft)return;try {
     const response=readModelResponse(text);
+    if(response.recoveredText)setImportText(response.recoveredText);
     const unit:Unit={id:unitRef||selectedBlock,boundary:isSpanningUnit,parts:unitSegments.map(part=>{const comments=unitPages.find(p=>p.ref===part.id);return {ref:part.id,original:part.text,rashi:(comments?.rashi||[]).map(c=>({ref:c.ref,original:c.text})),tosafot:(comments?.tosafot||[]).map(c=>({ref:c.ref,original:c.text}))};})};
     const previous=mergeDraft(emptyDraft(unit),{title:draft.title,explanation:draft.explanation,parts:draft.parts||[{ref:draft.ref,translation:draft.translation}],pages:draft.pages||[{ref:draft.ref,rashi:draft.rashi,tosafot:draft.tosafot}]});
     const imported=importDraft(unit,response.value,previous),current=imported.pages.find(p=>p.ref===draft.ref)!;

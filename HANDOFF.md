@@ -72,3 +72,13 @@ Denominator: 81574 подтверждённых refs в Sefaria Wikisource; гл
 Release confirmed: live version 74, commit 3fe2568b83c192b2514f7e67fe98fdb374968623, Sites env revision 2, deployment appgdep_6ac419a87ff08191bf2b3ebb8ee27fb4 succeeded. Build passed. Production admin /notifications test POST accepted by Mailjet; UI displayed acceptance. Inbox delivery awaits user's observation. No article was created for this test. Original checkout synchronized (18 files), backup in current task work/before-mailjet-sync.
 
 Sender changed at user request to kivaon@gmail.com; both sender addresses confirmed by user. Recipient remains pitronot@proton.me. Test campaign connection-test-gmail-v2 permits one fresh test without replaying existing article notifications. Prior inbox delivery NOT confirmed: user only found activation messages.
+
+## 2026-10-10 — phone smart-quote recovery
+
+Release prepared from live v75 in work/daf-ru-quotes-release. Deferred Sefaria/geometry WIP remains in work/daf-ru-parser-release and is NOT included.
+
+Root cause: old parser only opened smart strings with “ and closed with ”. The phone response opens two translation values with ”. Recovery ran but failed; readModelResponse then reported the original input at column 2. Existing parser now recognizes either glyph at token boundaries and preserves internal paired smart quotes, guillemets and ASCII escapes. Strict JSON still returns before recovery.
+
+Batch paste and old-draft adoption normalize recovered raw once before autosave, so reopening does not reapply raw over manual edits. Single import also uses the same readModelResponse → parseModelResponse → importDraft path.
+
+Verification: 55 tests pass, typecheck passes. Exact tests/fixtures/chullin-105b-phone.txt passes parsing, schema, draft save/reopen and changeBatch publication. Local browser with actual Sefaria Chullin 105b: pasted exact fixture into item 9, all fields populated, clicked Save and next; status Ready, 1/19, moved to item 10. GET /api/articles confirms exact title/translation and two Rashi, zero Tosafot. Single-ref database storage flattens parts into translation (existing behavior), while parsed response retains parts.length=1 and pages.length=1. QA used isolated local DB only.
