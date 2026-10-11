@@ -112,3 +112,21 @@ for(const decorated of [false,true]) test(`real phone response ${decorated?'with
  const rows=await articleRows(db,'Chullin',['105b:9']);assert.equal(rows.length,1);assert.equal(rows[0].title,imported.title);assert.deepEqual(JSON.parse(rows[0].rashi_json),imported.pages[0].rashi);assert.deepEqual(JSON.parse(rows[0].tosafot_json),[]);
  const wrong=structuredClone(parsed.value) as {pages:{rashi:{ref:string}[]}[]};wrong.pages[0].rashi[0].ref='Rashi on Chullin 105b:99:1';assert.throws(()=>importDraft(u,wrong,emptyDraft(u)),/отсутствует в источниках/);
 });
+
+test('empty source side cannot create a falsely complete queue',async()=>{
+ const {db,sqlite}=database();
+ await assert.rejects(()=>createBatch(db,'alice','Nazir','33b',[]),/нет реплик/);
+ assert.equal((sqlite.prepare('SELECT count(*) AS n FROM editor_batches').get() as {n:number}).n,0);
+});
+
+test('real Nazir Tosafot survives draft reopen and atomic publication without any PDF data',async()=>{
+ const sources=JSON.parse(readFileSync(new URL('./fixtures/nazir-sources.json',import.meta.url),'utf8'));
+ const link=sources['33a'].links.find((l:{ref:string})=>l.ref==='Tosafot on Nazir 33a:2:1');
+ const u:Unit={id:'Nazir 33a:2',boundary:false,parts:[{ref:'33a:2',original:sources['33a'].source.he[1],rashi:[],tosafot:[{ref:link.ref,original:link.he}]}]};
+ const {db}=database();let state=await createBatch(db,'alice','Nazir','33a',[u]);
+ const draft=importDraft(u,{title:'Тест источника',translation:'Тест перевода',explanation:'Тест объяснения',tosafot:[{ref:link.ref,translation:'Тест полного Тосафот',explanation:'Тест комментария'}]},emptyDraft(u));
+ state=await changeBatch(db,'alice',{tractate:'Nazir',page:'33a',revision:state.revision,index:0,action:'draft',draft});
+ const reopened=await getBatch(db,'alice','Nazir','33a');assert.equal(reopened!.entries[0].unit.parts[0].tosafot[0].original,link.he);
+ state=await changeBatch(db,'alice',{tractate:'Nazir',page:'33a',revision:state.revision,index:0,action:'publish'});
+ const rows=await articleRows(db,'Nazir',['33a:2']);assert.deepEqual(JSON.parse(rows[0].tosafot_json),draft.pages[0].tosafot);assert.equal(state.entries[0].published,true);
+});

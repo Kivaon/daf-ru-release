@@ -80,3 +80,13 @@ Valid strict JSON must be returned unchanged. On failure the existing parser may
 
 ### Copy/paste response recovery
 The same readModelResponse pipeline is used on mobile and desktop. After strict parse fails, remove only a leading BOM and one complete JSON/plain Markdown fence, normalize Unicode whitespace only outside quoted values, recover smart delimiters, then apply the existing conservative closing-bracket suffix if needed. Reparse and run schema/ref validation. Retain quoted text exactly. Do not extract JSON from prose, guess mixed ASCII/smart delimiters, fix invalid escapes, remove directional controls or complete truncated text. Diagnose invisible syntax characters with Unicode code and location. Inspect accepted source using the existing diagnostics grammar walk to reject duplicate object keys (including escaped equivalents) before import; repeated keys in different objects remain allowed.
+
+## Источник и печатная страница (2026-10-11)
+
+Состав Гемары, Раши и Тосафот определяется исключительно успешным ответом Sefaria. PDF и его текстовый слой — дополнительная визуальная привязка: отсутствие координат не блокирует показ источников, выбор ref, задания AI, импорт или сохранение. Диапазон anchorRef включает все свои реплики, в том числе на соседней стороне. Полный текст комментария остаётся под ref источника и не обрезается по границе PDF.
+
+Печатные продолжения имеют отдельный указатель «страница → ref комментария + ref Гемары»; он не создаёт смысловые связи. В нём зафиксированы проверенные вхождения Nazir 33a/33b, включая продолжение 31b:3:1 на обеих сторонах. Это указатель конкретного издания, не универсальная геометрическая реконструкция. На странице доступны оригинал комментария и переход к статье-владельцу. Полный текст включается в обычное и пакетное задание этой статьи.
+
+Nazir 33b имеет подтверждённый пустой текст Гемары в Wikisource и текущей версии Sefaria. PDF отображается; 0/0 не означает готовность. Пустая очередь не создаётся. На карте такая сторона показывает готовность проверенных печатных комментариев без повторного увеличения общего числа исходных refs. Ошибка загрузки никогда не считается подтверждённым отсутствием.
+
+Требования карты, закэшированные до исправления диапазонов, повторно проверяются; это обновляет только source-only кэш, не статьи. Аудит сохранённых статей отдельно сообщает структурную полноту и пределы проверки качества перевода.

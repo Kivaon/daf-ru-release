@@ -15,6 +15,7 @@ export async function refreshBatch(db:D1Database,state:Batch){
  for(const entry of state.entries){entry.saved=savedDraft(entry.unit,rows);entry.draft=mergeDraft(entry.saved,entry.draft);entry.published=entry.unit.parts.every(p=>rows.some(r=>r.ref===p.ref));}return state;
 }
 export async function createBatch(db:D1Database,userId:string,tractate:string,page:string,units:Unit[]):Promise<Batch>{
+ if(!units.length)throw new BatchError("На этой стороне нет реплик Гемары. Откройте исходные статьи показанных продолжений комментариев.");
  const state:Batch={tractate,page,index:0,revision:0,entries:units.map(unit=>({unit,saved:emptyDraft(unit),draft:emptyDraft(unit),skipped:false,started:false,published:false}))};
  await refreshBatch(db,state);state.index=nextPending(state.entries,state.entries.length-1);
  await db.prepare('INSERT INTO editor_batches (id,user_id,tractate,page,state_json,revision,updated_at) VALUES (?,?,?,?,?,0,?) ON CONFLICT(user_id,tractate,page) DO NOTHING').bind(crypto.randomUUID(),userId,tractate,page,serialize(state),new Date().toISOString()).run();

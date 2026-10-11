@@ -87,3 +87,17 @@ Published v76, succeeded, commit e9ef95c61c767a5748a1932e96202172320a0dca. Produ
 
 ## 2026-10-10 — combined copy/paste recovery
 Existing recovery now composes BOM/fence cleanup, outside-string whitespace normalization, smart quotes and safe closing suffix. Existing diagnostics walker rejects duplicate fields before import and identifies invisible syntax characters with code/position. Batch recovery notice is generalized. 61 tests and typecheck pass, including original and damaged Chullin fixtures through schema, draft save/reopen and real changeBatch publication with isolated SQLite. No new browser run in this follow-up; prior v76 UI path remains unchanged apart from notification wording. Deferred geometry WIP excluded.
+
+## 2026-10-11 — Sefaria, PDF и Nazir (подготовка выпуска)
+
+Продолжено с опубликованной v77 (9e4143fbffb8f4cb352c1c6c1789f256244cb135). Новый checkout существующего Sites: work/daf-ru-release в задаче 2026-10-11. Соседний work/daf-ru был во время паузы оформлен как GitHub backup; не менять его remote/историю. Старый WIP сохранён в work/wip-preserved и исходной папке parser-release.
+
+Исправления JSON v77 оставлены без изменений. Sefaria refs/полные тексты отделены от геометрии PDF; добавлен выбор любой реплики, PDF показывается при отсутствии Гемары и при ошибке получения источников. Ошибка текстового слоя не препятствует рендеру. Единый обработчик связей учитывает диапазоны через стороны, отклоняет неполный ответ. Исправлен Node JSON import attribute.
+
+Nazir 33a: 2 реплики, 2 Раши к 33a:1, 1 Тосафот к 33a:2. Nazir 33b: подтверждённо нет Гемары. Печатные продолжения доступны отдельно по полным текстам и ссылкам на исходные статьи; 31b:3:1 пересекает 33a/33b. В список WIP добавлены проверенные вхождения 34a:4:1 на 33a, 31b:10:1 и 32a:9:1 на 33b. Связи нельзя выводить из номера печатной стороны. Указатель не претендует на охват всего корпуса. Пустая очередь не создаётся, 0/0 не становится готовностью. Source-only кэш требований карты до 2026-10-10T22:00Z перепроверяется.
+
+Аудит текущей БД: 64 строки articles в 7 трактатах (старый список был 43), ожидаемые/фактические 150 Раши и 31 Тосафот. Пропущенных/посторонних refs, дублей и пустых обязательных полей не выявлено. Все 580 текстов комментариев на 20 проверенных страницах совпали между links и явными диапазонами texts Sefaria. Полная филологическая оценка переводов не выполнена; исторические оригиналы в articles отсутствуют, поэтому отсутствие смысловых сокращений не гарантируется. Отчёт и точные refs: outputs/DAF-RU-audit.md и DAF-RU-audit-refs.json в задаче 2026-10-11; снимки/скрипты — work/audit. Production articles не изменялись.
+
+Браузер: реальный PDF 33b отображается; на 33a доступен выбор 33a:2 с полным Тосафот. В отдельном локальном QA proxy намеренно подставлен другой PDF: геометрия не сопоставляется, но источники, editor tools и очередь из двух статей доступны. QA proxy и локальная БД не входят в выпуск. Статус итоговых проверок/публикации — следующей записью.
+
+Итоговая проверка перед публикацией: 67/67 тестов, typecheck и git diff --check проходят. Парсер/диагностика JSON не отличаются от v77. UI с отказавшей геометрией: Nazir 33a:2 → пакет → полный Tosafot on Nazir 33a:2:1 → JSON → «Сохранить и дальше» → 1/2 готово, следующий пункт. Это только local-source-qa в отдельной локальной БД. Production build и номер публикации записываются после завершения Sites.

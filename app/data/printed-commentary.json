@@ -1,0 +1,193 @@
+{
+  "Nazir": {
+    "33a": [
+      {
+        "ref": "Tosafot on Nazir 31a:2:1",
+        "base": "31a:2",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:2:1",
+        "base": "31b:2",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31a:3:1",
+        "base": "31a:3",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:3:1",
+        "base": "31b:3",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31a:5:1",
+        "base": "31a:5",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31a:6:1",
+        "base": "31a:6",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31a:6:2",
+        "base": "31a:6",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31a:7:1",
+        "base": "31a:7",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31a:8:1",
+        "base": "31a:8",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31a:11:1",
+        "base": "31a:11",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32b:9:2",
+        "base": "32b:9",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 34a:4:1",
+        "base": "34a:4",
+        "kind": "tosafot"
+      }
+    ],
+    "33b": [
+      {
+        "ref": "Tosafot on Nazir 31b:3:1",
+        "base": "31b:3",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:4:1",
+        "base": "31b:4",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:5:1",
+        "base": "31b:5",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:5:2",
+        "base": "31b:5",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:6:1",
+        "base": "31b:6",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:7:1",
+        "base": "31b:7",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:7:2",
+        "base": "31b:7",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:8:1",
+        "base": "31b:8",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:9:1",
+        "base": "31b:9",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:9:2",
+        "base": "31b:9",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:3:1",
+        "base": "32a:3",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32b:3:1",
+        "base": "32b:3",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32b:4:1",
+        "base": "32b:4",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:5:1",
+        "base": "32a:5",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32b:5:1",
+        "base": "32b:5",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:6:1",
+        "base": "32a:6",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32b:6:1",
+        "base": "32b:6",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:7:2",
+        "base": "32a:7",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:8:1",
+        "base": "32a:8",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:9:2",
+        "base": "32a:9",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:10:1",
+        "base": "32a:10",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32b:10:1",
+        "base": "32b:10",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:12:1",
+        "base": "32a:12",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:10:1",
+        "base": "31b:10",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:9:1",
+        "base": "32a:9",
+        "kind": "tosafot"
+      }
+    ]
+  }
+}

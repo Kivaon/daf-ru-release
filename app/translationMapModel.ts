@@ -1,9 +1,10 @@
+import type {PrintedRef} from './printedSources.ts';
 import type {SavedRow, Comment} from './batchModel.ts';
 import {filled} from './batchModel.ts';
 import {TRACTATES} from './talmudCatalog.ts';
 import type {Tractate} from './talmudCatalog.ts';
 export type Requirement={ref:string;rashi:string[];tosafot:string[]};
-export type PageProgress={page:string;total:number|null;ready:number|null;draft:number|null;missing:number|null;complete:boolean;pending:boolean};
+export type PageProgress={page:string;total:number|null;ready:number|null;draft:number|null;missing:number|null;complete:boolean;pending:boolean;commentary?:{total:number;ready:number;draft:number;missing:number}};
 export function pagesFor(t:Tractate){return Array.from({length:t.lastDaf*2+(t.lastSide==='b'?1:0)-3},(_,i)=>`${Math.floor((i+4)/2)}${i%2?'b':'a'}`);}
 export const editorHref=(tractate:string,page:string)=>`/?tractate=${encodeURIComponent(tractate)}&daf=${page}&prepare=1`;
 const list=<T,>(value:string):T[]=>{try{const parsed=JSON.parse(value);return Array.isArray(parsed)?parsed:[];}catch{return [];}};
@@ -31,3 +32,11 @@ export function sumProgress(pages:PageProgress[]){
 }
 
 export function editorLocation(search:string){const params=new URLSearchParams(search),t=TRACTATES.find(t=>t.sefaria===params.get('tractate')),page=params.get('daf')||'';if(!t||!pagesFor(t).includes(page))return null;return {tractate:t.sefaria,page,daf:Number(page.slice(0,-1)),side:page.slice(-1) as 'a'|'b',prepare:params.get('prepare')==='1'};}
+
+export function printedProgress(page:PageProgress,refs:PrintedRef[],rows:SavedRow[]):PageProgress{
+ if(page.total!==0||!refs.length)return page;let ready=0,draft=0;
+ for(const item of refs){const row=rows.find(r=>r.ref===item.base),comment=row?list<Comment>(row[`${item.kind}_json`]).find(c=>c.ref===item.ref):undefined;
+  if(comment&&filled(comment.translation)&&filled(comment.explanation))ready++;else if(comment&&(filled(comment.translation)||filled(comment.explanation)))draft++;
+ }
+ return {...page,complete:ready===refs.length,commentary:{total:refs.length,ready,draft,missing:refs.length-ready-draft}};
+}

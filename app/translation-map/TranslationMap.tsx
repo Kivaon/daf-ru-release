@@ -34,12 +34,12 @@ export default function TranslationMap({catalog,sourceDate}:{catalog:Catalog;sou
    <table className="mapTable"><thead><tr><th scope="col" className="mapCorner">Трактат и прогресс</th>{columns.map(p=><th scope="col" key={p.page}>{p.page}</th>)}</tr></thead><tbody>
     {rows.map(t=>{const sum=sumProgress(t.progress);return <tr key={t.name}><th scope="row" className="mapRowTitle"><strong>{t.label}</strong><span>{`${counts(sum.ready,sum.total,sum.known)}${t.error?' + ?':''} статей${sum.known?` · ${percent(sum.ready,sum.total)}`:''}`}</span><span>{counts(sum.complete,sum.pages,sum.known)} дафов{sum.known?` · ${percent(sum.complete,sum.pages)}`:''}</span></th>
      {columns.map((column,index)=>{const p=t.progress[index];if(!p)return <td key={column.page} className="mapOutside" aria-label="За пределами трактата"/>;
-      const known=p.ready!==null&&p.draft!==null&&p.total!==null,green=known&&p.total?p.ready!/p.total*100:0,pink=known&&p.total?p.draft!/p.total*100:0;
-      const description=`${t.label} ${p.page}: ${known?`${p.ready} из ${p.total} готовы, ${p.draft} черновиков, ${p.missing} отсутствуют`:p.total===null?'источник недоступен':'готовность уточняется'}. Открыть подготовку страницы`;
+      const known=p.ready!==null&&p.draft!==null&&p.total!==null,green=p.commentary?p.commentary.ready/p.commentary.total*100:known&&p.total?p.ready!/p.total*100:0,pink=p.commentary?p.commentary.draft/p.commentary.total*100:known&&p.total?p.draft!/p.total*100:0;
+      const description=`${t.label} ${p.page}: ${p.commentary?`Нет Гемары; продолжения комментариев: ${p.commentary.ready} из ${p.commentary.total} готовы`:known?`${p.ready} из ${p.total} готовы, ${p.draft} черновиков, ${p.missing} отсутствуют`:p.total===null?'источник недоступен':'готовность уточняется'}. Открыть подготовку страницы`;
       return <td key={p.page}><a className={`mapCell${known?'':' mapUnknown'}`} href={editorHref(t.name,p.page)} aria-label={description} title={description} style={known?{background:`linear-gradient(to right, #3b975b 0%, #3b975b ${green}%, #edacc0 ${green}%, #edacc0 ${green+pink}%, #fff ${green+pink}%, #fff 100%)`}:undefined}>{!known&&<span aria-hidden="true">{t.error||errors[t.name]?'!':'…'}</span>}</a></td>;
      })}</tr>;})}
    </tbody></table>
   </div>
-  <p className="mapFootnote">Готовность означает заполненные переводы и объяснения всех предусмотренных частей и комментариев. Личные тексты черновиков здесь не раскрываются. Индекс исходных refs: {new Date(sourceDate).toLocaleDateString('ru-RU')}.</p>
+  <p className="mapFootnote">На страницах без Гемары цвет показывает готовность продолжающихся комментариев; они не увеличивают количество статей. Готовность означает заполненные переводы и объяснения всех предусмотренных частей и комментариев. Личные тексты черновиков здесь не раскрываются. Индекс исходных refs: {new Date(sourceDate).toLocaleDateString('ru-RU')}.</p>
  </main>;
 }

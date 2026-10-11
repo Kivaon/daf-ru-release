@@ -40,7 +40,7 @@ export default function BatchEditor({tractate,page,label,ready,autoOpen=false,on
  const done=batch?.entries.filter(entryReady).length||0,skipped=batch?.entries.filter(e=>!entryReady(e)&&e.skipped).length||0;
  const partial=batch?.entries.filter(e=>!entryReady(e)&&readiness(e.saved).gemara).length||0;
  const draftReady=draft?readiness(draft):null;
- const complete=!!batch&&done===batch.entries.length;
+ const complete=!!batch&&batch.entries.length>0&&done===batch.entries.length;
  const locked=(value:string|undefined)=>filled(value);
  return <>
   <button className="batchLaunch" disabled={!ready} onClick={open}>Подготовить весь лист</button>

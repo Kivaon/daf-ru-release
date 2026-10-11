@@ -15,6 +15,7 @@ def fetch(t):
     key=f'{(i+4)//2}{"b" if i%2 else "a"}'
     refs=[f'{key}:{j+1}' for j,value in enumerate(parts) if isinstance(value,str) and re.sub('<[^>]*>','',value).strip()]
     if refs:pages[key]=refs
+    elif name=='Nazir' and key=='33b':pages[key]=[] # Verified commentary-only printed side; no Gemara refs.
     else:missing.append(key)
    print(name,len(pages),sum(map(len,pages.values())),flush=True)
    return name,{'version':d.get('heVersionTitle'),'url':url,'pages':pages,**({'error':'В источнике отсутствуют реплики: '+', '.join(missing)} if missing else {})}

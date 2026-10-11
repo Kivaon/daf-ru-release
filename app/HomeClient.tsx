@@ -1,5 +1,7 @@
 "use client";
 
+import {sourceComments} from "./sefariaLinks";
+import PrintedCommentary from "./PrintedCommentary";
 import { readModelResponse } from "./responseDiagnostics";
 import { emptyDraft, importDraft, mergeDraft, missingFields } from "./batchModel";
 import type { Unit } from "./batchModel";
@@ -13,6 +15,8 @@ import { PdfDafViewer, DafSegment } from "./PdfDafViewer";
 import { CommentaryLink } from "./bekhorot2aCommentary";
 import { TRACTATES, tractateBySefaria } from "./talmudCatalog";
 
+const EMPTY_SEGMENTS:DafSegment[]=[];
+const EMPTY_COMMENTS:CommentaryLink[]=[];
 const POSITION_KEY = "daf-ru-last-page";
 const clean = (value: string) => value.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").trim();
 const dibur = (value: string) => {
@@ -134,7 +138,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     if (!restored) return;
     const controller = new AbortController();
     (async () => {
-      setStatus("loading"); setError(""); setBlockLocated(false); setComments([]); setSelectedWord(null); setBoundaries({joinsPrevious:false,joinsNext:false});
+      setStatus("loading"); setError(""); setSegments([]); setSelectedBlock(""); setBlockLocated(false); setComments([]); setSelectedWord(null); setBoundaries({joinsPrevious:false,joinsNext:false});
       try {
         const loadBundle = async (key:string, includeLinks=true):Promise<PageBundle> => {
           const ref = `${tractate.sefaria}.${key}`;
@@ -144,28 +148,24 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
             includeLinks?fetch(`https://www.sefaria.org/api/links/${encodeURIComponent(ref)}?with_text=1`,{signal:controller.signal}):Promise.resolve(null),
           ]);
           if(!textResponse.ok)throw new Error("Sefaria не вернула текст листа");
-          const data=await textResponse.json() as {he?:string[]};
+          const data=await textResponse.json() as {he?:string[];error?:string};
+          if(data.error||!Array.isArray(data.he)||!data.he.every(v=>typeof v==="string"))throw new Error("Sefaria не вернула полный текст листа");
           const davidson=davidsonResponse.ok?await davidsonResponse.json() as {he?:string[];text?:string[]}:{he:[],text:[]};
           const pageSegments=(data.he||[]).map((text,index)=>({id:`${key}:${index+1}`,kind:/^(מתני|מַתְנִי)/.test(clean(text))?"Мишна":"Гемара",text:clean(text)})).filter((item)=>item.text);
           let pageComments:CommentaryLink[]=[];
-          if(linksResponse?.ok){const links=await linksResponse.json() as Array<Record<string,unknown>>;pageComments=links.flatMap((link)=>{
-            const commentator = (link.collectiveTitle as { en?:string } | undefined)?.en;
-            const match = String(link.anchorRef || "").match(/(\d+[ab]):(\d+)/i);
-            const text = clean(String(link.he || ""));
-            if ((commentator !== "Rashi" && commentator !== "Tosafot") || !match || !text) return [];
-            return [{ base:`${match[1]}:${match[2]}`, commentator, ref:String(link.ref || link.sourceRef || ""), text, dibur:dibur(String(link.he || "")) } as CommentaryLink];
-          });}
+          if(includeLinks){if(!linksResponse?.ok)throw new Error("Не удалось получить комментарии Sefaria. Повторите загрузку.");pageComments=sourceComments(await linksResponse.json(),tractate.sefaria,pageSegments.map(p=>p.id));}
           return{pageKey:key,segments:pageSegments,comments:pageComments,davidsonHe:davidson.he||[],davidsonEn:davidson.text||[]};
         };
         const previousKey=pageBefore(daf,side),nextKey=pageAfter(daf,side,tractate.lastDaf,tractate.lastSide);
         const [current,previous,next]=await Promise.all([loadBundle(pageKey),previousKey?loadBundle(previousKey).catch(()=>undefined):Promise.resolve(undefined),nextKey?loadBundle(nextKey).catch(()=>undefined):Promise.resolve(undefined)]);
         const nextSegments=current.segments,nextComments=current.comments;
-        if (!nextSegments.length) throw new Error("В Sefaria не найдены реплики листа");
+
         if (controller.signal.aborted) return;
         setSegments(nextSegments); setComments(nextComments);
         setBoundaries({previous,next,joinsPrevious:Boolean(previous&&boundaryContinues(previous,current)),joinsNext:Boolean(next&&boundaryContinues(current,next))});
-        const preferred = landingEdge === "end" ? nextSegments.at(-1)!.id : nextSegments[0].id;
-        setSelectedBlock(preferred);
+        const preferred = landingEdge === "end" ? nextSegments.at(-1)?.id : nextSegments[0]?.id;
+        const requested=new URLSearchParams(window.location.search).get("ref");
+        setSelectedBlock(nextSegments.some(s=>s.id===requested)?requested!:preferred||"");
         setStatus("ready");
       } catch (reason) {
         if (!controller.signal.aborted) { setStatus("error"); setError(reason instanceof Error ? reason.message : String(reason)); }
@@ -179,7 +179,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     else { if (isLast) return; setLandingEdge("start"); if (side === "a") setSide("b"); else { setDaf((value) => value + 1); setSide("a"); } }
   };
   const selectWord = useCallback((blockId:string, word:string) => { setPicked(null); setSelectedBlock(blockId); setSelectedWord(word); }, []);
-  const located = useCallback((locatedBlock?:string) => { if(locatedBlock)setSelectedBlock(locatedBlock); setBlockLocated(true); }, []);
+  const located = useCallback((locatedBlock?:string) => { setBlockLocated(true); }, []);
   const selected = useMemo(() => segments.find((item) => item.id === selectedBlock), [segments, selectedBlock]);
   const linked = useMemo(() => comments.filter((item) => item.base === selectedBlock), [comments, selectedBlock]);
   const rashi = useMemo(() => linked.filter((item) => item.commentator === "Rashi"), [linked]);
@@ -262,7 +262,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   const saveArticle = async () => { if(!draft)return; setSaving(true);setEditorMessage(""); try { const response=await fetch("/api/articles",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...draft,tractate:draft.tractate,ref:draft.ref})}); const data=await response.json() as {error?:string;article:GeneratedArticle}; if(!response.ok)throw new Error(data.error||"Ошибка сохранения"); setGeneratedArticle({...data.article,tractate:draft.tractate,generatedAt:data.article.updatedAt||draft.generatedAt});setEditorOpen(false); } catch(reason){setEditorMessage(reason instanceof Error?reason.message:String(reason));} finally{setSaving(false);} };
   const openUsers=()=>{window.location.href="/admin";};
   useEffect(() => {
-    if (!selected || !blockLocated || !canEditArticles) return;
+    if (!selected || status!=="ready" || !canEditArticles) return;
     const context = (document as Document & { modelContext?:ModelContext }).modelContext;
     if (typeof context?.registerTool !== "function") { setSiteToolsAvailable(false); return; }
     setSiteToolsAvailable(true);
@@ -356,12 +356,13 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     <header className="topbar"><div className="brand"><span className="brandMark">דף</span><span>Daf-Ru</span></div><div className="account">{user?<><span title={user.email}>{user.name}</span>{user.role==="admin"&&<button className="iconButton" onClick={openUsers}>Пользователи</button>}<a className="accountLink" href={signOutHref} target="_top">Выйти</a></>:<a className="signInButton" href={signInHref} target="_top">Войти</a>}<button className="iconButton" onClick={()=>setDictionaryOpen(true)} aria-label="Открыть словарь">⌘ <span>Словарь</span>{words.length>0&&<b>{words.length}</b>}</button>{canEditArticles&&<a className="mapNavLink" href="/translation-map">Карта перевода</a>}<AboutProject /></div></header>
     <section className="workspace"><aside className="sourcePane dafPane" onPointerDown={()=>setPicked(null)}>
       <nav className="dafNavigation compactNavigation" aria-label="Навигация по Талмуду"><button disabled={isFirst} onClick={()=>move(-1)} aria-label="Предыдущая страница">←</button><label><select value={tractateTitle} aria-label="Трактат" onChange={(e)=>{setLandingEdge("start");setTractateTitle(e.target.value);setDaf(2);setSide("a");}}>{TRACTATES.map((item)=><option key={item.sefaria} value={item.sefaria}>{item.ru}</option>)}</select></label><label><select value={pageKey} aria-label="Страница" onChange={(e)=>choosePage(e.target.value)}>{pageOptions.map((value)=><option key={value} value={value}>{value.replace("a","а").replace("b","б")}</option>)}</select></label><button disabled={isLast} onClick={()=>move(1)} aria-label="Следующая страница">→</button><div className="zoomControls"><button onClick={()=>setZoom(v=>Math.max(.6,v-.15))} aria-label="Уменьшить">−</button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(v=>Math.min(1.8,v+.15))} aria-label="Увеличить">+</button></div><a className="originalPdfPrint" href={pdfUrl} target="_blank" rel="noopener noreferrer" aria-label="Открыть PDF оригинала страницы для печати" title="Печать оригинала страницы (PDF)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H3v-8h18v8h-3M6 14h12v7H6z"/><path d="M17 11h1"/></svg><span>PDF</span></a></nav>
-      <div className="dafViewport">{status==="ready"?<PdfDafViewer zoom={zoom} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={segments} commentary={comments}/>:<div className={`pageDataStatus ${status}`}>{status==="loading"?"Получаем лист и текст…":<><b>Не удалось загрузить лист</b><small>{error}</small></>}</div>}</div>
+      <div className="dafViewport"><PdfDafViewer zoom={zoom} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={status==="ready"?segments:EMPTY_SEGMENTS} commentary={status==="ready"?comments:EMPTY_COMMENTS}/></div>
       <div className="pageGuide compactGuide"><span>Лист: Shas.org / HebrewBooks · текст и связи: Sefaria</span></div>
     </aside><article className="studyPane" onMouseUp={captureSelection}>
-      <div className="studyNavigation"><div><span>{tractate.ru}</span><b>{daf}{side==="a"?"а":"б"}</b>{canEditArticles&&<BatchEditor key={`batch-${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} page={pageKey} label={label} autoOpen={prepareTarget===`${tractate.sefaria}|${pageKey}`} ready={status==="ready"} onSaved={()=>setArticleRetry(value=>value+1)}/>}<PrintPage key={`${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} label={label} segments={segments} context={[...(boundaries.previous?.segments||[]),...segments,...(boundaries.next?.segments||[])]} comments={[...(boundaries.previous?.comments||[]),...comments,...(boundaries.next?.comments||[])]} ready={status==="ready"} /></div><nav aria-label="Соседние страницы">{nearbyPages.map((value)=><button key={value} className={value===pageKey?"active":""} disabled={value===pageKey} onClick={()=>choosePage(value)}>{value.replace("a","а").replace("b","б")}</button>)}</nav></div>
+      <div className="studyNavigation"><div><span>{tractate.ru}</span><b>{daf}{side==="a"?"а":"б"}</b>{canEditArticles&&<BatchEditor key={`batch-${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} page={pageKey} label={label} autoOpen={prepareTarget===`${tractate.sefaria}|${pageKey}`} ready={status==="ready"&&segments.length>0} onSaved={()=>setArticleRetry(value=>value+1)}/>}<PrintPage key={`${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} label={label} segments={segments} context={[...(boundaries.previous?.segments||[]),...segments,...(boundaries.next?.segments||[])]} comments={[...(boundaries.previous?.comments||[]),...comments,...(boundaries.next?.comments||[])]} ready={status==="ready"} /></div><nav aria-label="Соседние страницы">{nearbyPages.map((value)=><button key={value} className={value===pageKey?"active":""} disabled={value===pageKey} onClick={()=>choosePage(value)}>{value.replace("a","а").replace("b","б")}</button>)}</nav></div>
+      <PrintedCommentary tractate={tractate.sefaria} page={pageKey}/>{status==="ready"&&segments.length>0&&<label className="replySelector">Реплика Sefaria <select aria-label="Реплика Sefaria" value={selectedBlock} onChange={e=>setSelectedBlock(e.target.value)}>{segments.map(s=><option key={s.id} value={s.id}>{s.id}</option>)}</select></label>}
       <nav className="replyNavigation" aria-label="Соседние реплики"><button disabled={!previousReply} onClick={()=>openReply(previousReply,"previous")}>← <span>Предыдущая реплика</span><b>{previousReply||""}</b></button><button disabled={!nextReply} onClick={()=>openReply(nextReply,"next")}><span>Следующая реплика</span><b>{nextReply||""}</b> →</button></nav>
-      {status!=="ready"||!blockLocated?<div className="studyWaiting"><span>{label}</span><h2>Связываем оригинальный лист с текстом Sefaria…</h2><p>Разбор появится после проверки соответствия реплик странице.</p></div>:<>
+      {status!=="ready"?<div className="studyWaiting"><span>{label}</span><h2>Получаем текст и комментарии Sefaria…</h2><p>{error||"PDF доступен независимо от загрузки текста. Геометрия не влияет на состав материалов."}</p></div>:!selected?<div className="analysisCard"><h2>На этой стороне нет реплик Гемары</h2><p>В выбранном источнике Sefaria текст Гемары отсутствует. Оригинальный PDF доступен слева; найденные продолжения комментариев показаны отдельно.</p></div>:<>
       {currentArticleLoad?.status==="error"?<div className="articleLoadNotice" role="alert">Не удалось загрузить сохранённый разбор. <button onClick={()=>setArticleRetry(value=>value+1)}>Повторить загрузку</button></div>:!currentArticleLoad&&<p role="status">Загружаем сохранённый разбор…</p>}
       <section className="analysisCard gemaraCard"><div className="cardTitle"><span>{savedArticle?"01":"•"}</span><div><h2>{activeGeneratedArticle?.title || (savedArticle?"Почему необходимы оба случая?":currentArticleLoad?.status==="ready"?"Разбор пока не сохранён":"Разбор")}</h2></div></div><div className={`spanningOriginal ${isSpanningUnit?"isSpanning":""}`}>{unitSegments.map((part)=><div key={part.id} className={`hebrew spanningPart ${part.id===selectedBlock?"active":"inactive"}`} lang="he" dir="rtl"><small>{part.id===selectedBlock?"НА ЭТОМ ЛИСТЕ":part.id.split(":")[0]===boundaries.previous?.pageKey?"ПРОШЛЫЙ ЛИСТ":"СЛЕДУЮЩИЙ ЛИСТ"}</small><span>{boldService(part.text)}</span>{part.id!==selectedBlock&&<button type="button" className="unitPartNavigation" lang="ru" dir="ltr" onClick={()=>openUnitPart(part.id)}>Перейти к листу {part.id.split(":")[0].replace("a","а").replace("b","б")}</button>}</div>)}</div>{activeGeneratedArticle?<><div className="rule"/><h3>Точный перевод</h3>{activeGeneratedArticle.parts?.length?<div className="spanningTranslation">{activeGeneratedArticle.parts.map((part)=><div key={part.ref} className={`translationPart ${part.ref===selectedBlock?"active":"inactive"}`}><small>{part.ref}</small><span>{boldTranslationService(part.translation)}</span>{part.ref!==selectedBlock&&<button type="button" className="unitPartNavigation" onClick={()=>openUnitPart(part.ref)}>Перейти к листу {part.ref.split(":")[0].replace("a","а").replace("b","б")}</button>}</div>)}</div>:<p>{boldTranslationService(activeGeneratedArticle.translation)}</p>}<div className="explanation"><span>Объяснение</span><p>{activeGeneratedArticle.explanation}</p></div></>:savedArticle?<><div className="rule"/><h3>Точный перевод</h3><p>Они необходимы. Ведь если бы учили только о покупающем, я бы сказал: это потому, что он приводит её к святости. Но продающий, который выводит её из святости, — можно было бы сказать: оштрафуем его. Поэтому сообщается нам, что это не так.</p></>:<div className="explanation"><span>Источник</span><p>Проверенный оригинал из Sefaria. Нажмите «Создать статью».</p></div>}</section>
       {rashi.length>0&&<><div className="commentaryHeading"><span>Раши к этой реплике</span><i>{rashi.length}</i></div>{rashi.map((item)=>{const article=activeGeneratedArticle?.rashi.find((entry)=>entry.ref===item.ref);return <section className="analysisCard sourceCommentCard rashiSourceCard" key={item.ref}><div className="commentMeta"><b>РАШИ</b><span>{item.ref}</span></div><div className="hebrew" lang="he" dir="rtl">{boldDibur(item.text,item.dibur)}</div>{article&&<><div className="rule"/><h3>Точный перевод</h3><p>{boldTranslatedDibur(article.translation)}</p><div className="explanation"><span>Объяснение</span><p>{article.explanation}</p></div></>}</section>})}</>}{tosafot.length>0&&<><div className="commentaryHeading tosafotHeading"><span>Тосафот к этой реплике</span><i>{tosafot.length}</i></div>{tosafot.map((item)=>{const article=activeGeneratedArticle?.tosafot.find((entry)=>entry.ref===item.ref);return <section className="analysisCard sourceCommentCard tosafotCard" key={item.ref}><div className="commentMeta"><b>ТОСАФОТ</b><span>{item.ref}</span></div><div className="hebrew" lang="he" dir="rtl">{boldDibur(item.text,item.dibur)}</div>{article&&<><div className="rule"/><h3>Точный перевод</h3><p>{boldTranslatedDibur(article.translation)}</p><div className="explanation"><span>Объяснение</span><p>{article.explanation}</p></div></>}</section>})}</>}{linked.length===0&&<div className="noCommentary">Sefaria не связывает с этой репликой комментарии Раши или Тосафот.</div>}<div className="articleFooter"><strong>{tractate.ru} {isSpanningUnit?unitSegments.map((part)=>part.id).join(" + "):selectedBlock}</strong>{savedArticle&&!activeGeneratedArticle&&<div className="sourceBadge"><b>DAF-RU</b><span>редакционная версия</span><time>22.09.2026</time></div>}{activeGeneratedArticle&&<div className="sourceBadge aiBadge"><b>AI</b><span>{activeGeneratedArticle.provider||"AI"}</span><time>{new Date(activeGeneratedArticle.generatedAt).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"})}</time></div>}{canEditArticles&&<button className="editArticleButton" disabled={currentArticleLoad?.status!=="ready"} onClick={openEditor}>{activeGeneratedArticle?"Редактировать":"Создать статью"}</button>}</div></>}
