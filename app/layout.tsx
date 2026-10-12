@@ -24,6 +24,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru"><body>{children}<footer className="siteFooter" aria-label="Информация о сайте"><span>© 2026 Pitronot Group</span><span>Версия 79 · Опубликовано <time dateTime="2026-10-12">12.10.2026</time></span></footer></body></html>
+    <html lang="ru"><body>{children}<footer className="siteFooter" aria-label="Информация о сайте"><span>© 2026 Pitronot Group</span><span>Версия 80 · Опубликовано <time dateTime="2026-10-12">12.10.2026</time></span></footer></body></html>
   );
 }

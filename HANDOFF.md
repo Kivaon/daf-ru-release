@@ -107,3 +107,8 @@ Nazir 33a: 2 реплики, 2 Раши к 33a:1, 1 Тосафот к 33a:2. Naz
 
 
 2026-10-12: добавлен общий нижний колонтитул © 2026 Pitronot Group · Версия 79 · Опубликовано 12.10.2026. Следующим выпускам обновлять номер/дату в app/layout.tsx.
+
+Опубликована v79, succeeded, commit 6e0ef6dfedf2602126dceff76ab98045506b541a. Typecheck и production build прошли; footer подтверждён в HTML опубликованной страницы.
+
+## v80 — printed location clarification and source refresh
+Live v79 UI audit confirmed all six known Nazir 32b Tosafot printed on 33a/33b are present (32b:3,4,5,6,9:2,10). Semantic refs did not reveal physical locations. Source cards now show verified printed occurrences and direct PDF links; unknown locations are not guessed. Opening an existing single-article draft appends newly linked source comments while preserving saved translations. Existing database content is not changed. Typecheck and 69 tests pass.
