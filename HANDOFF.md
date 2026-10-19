@@ -116,3 +116,63 @@ Nazir 33a: 2 реплики, 2 Раши к 33a:1, 1 Тосафот к 33a:2. Naz
 
 ## v80 — printed location clarification and source refresh
 Live v79 UI audit confirmed all six known Nazir 32b Tosafot printed on 33a/33b are present (32b:3,4,5,6,9:2,10). Semantic refs did not reveal physical locations. Source cards now show verified printed occurrences and direct PDF links; unknown locations are not guessed. Opening an existing single-article draft appends newly linked source comments while preserving saved translations. Existing database content is not changed. Typecheck and 69 tests pass.
+
+## 2026-10-12 — подготовка v81: два адреса
+Реализован согласованный формат и текст перехода без ссылки в карточках оригиналов и печатном указателе. Сверено изображение audit/nazir33b.png с началами комментариев Sefaria: правая колонка сверху вниз (входящее продолжение 31b:3:1, затем 31b:4:1 … 32a:3:1); левая колонка сверху вниз (32a:5:1 … 32b:10:1). Всего 26 вхождений; добавлен 32a:7:1 на позиции 15; 32b:3:1 = 22. Входящее продолжение считается первым. Для 33a номера пока неизвестны. Ни порядок JSON, ни семантическая нумерация не используются как физические номера. Реальные API Sefaria Index Rashi/Tosafot on Nazir проверены: schema Daf/Line/Comment, alt_structs только Chapters; физического указателя там нет. Переводы, refs, JSON recovery и AboutProject не изменены. 72 теста прошли; статус сборки/публикации записать после выпуска.
+
+Выпуск подтверждён: v81, succeeded, commit c407bca0b34a8b77dec4def3aedc224c55e16b41, deployment appgdep_6acd1ede37b48191bdaef49a959b493b. 72 теста, typecheck, production build прошли. Локальный браузер Nazir 32b:3 подтвердил новую подпись и общую PDF-кнопку. Отдельная browser QA production и страниц 33a/33b не выполнена. Публичный доступ сохранён. Осталось расширить физический указатель за пределы 26 Тосафот Nazir 33b. Эта запись добавлена после публикации.
+
+
+## 18.10.2026 — локально реализован индекс начал и новый формат (не опубликовано)
+В существующем daf-ru-release добавлены commentary-starts.json и проверяемый импорт отчёта. 145 refs / 144 начала Назир 31a–34a; номера отдельно по типам, входящие продолжения не нумеруются. Двойной Tosafot 34a:4:2 / 34a:8:1 сохраняет оба refs с одним адресом 34a:6. Для Раши 31b/34a ordinal намеренно отсутствует до разбора остатков Викитекста. Старые ordinal в индексе вхождений удалены, пропущенный 31b:10:2 добавлен на 33b.
+Подписи в карточках и редакторах: «на Назир 32b:3:1», при другой странице начала «(см. на стр.33b)». Продолжение на следующем листе не меняет адрес начала. Служебных надписей о непроверенном адресе нет. Полные тексты, ключи Sefaria, переводы, JSON recovery и «О проекте» не менялись. Подробности и ограничения: COMMENTARY-LOCATIONS.md в checkout.
+Проверки: 73 теста, typecheck; локальный браузер Nazir 32b:3 подтвердил обе подписи Раши/Тосафот. Не проводилась новая визуальная сверка печатных страниц.
+Sites get_site подтвердил опубликованную v81, commit c407bca0b34a8b77dec4def3aedc224c55e16b41. Автоматическая проверка разрешений отклонила передачу credential через stdin штатному site-workflow helper: approval required, sandbox_approval=false; подробная причина не дана. Network и отдельное разрешение на .git не сняли блокировку. Обход не предпринимался; open/save/deploy не выполнены. Footer остаётся v81, новые изменения только локальны и не закоммичены.
+Следующее: разрешить штатную синхронизацию Sites, затем проверить актуальный head с сохранением этих изменений, обновить footer под фактический выпуск, build/save/deploy и проверить production. Далее разобрать остатки Раши 31b/34a и расширять физический индекс; не повторять уже выполненный прогон.
+
+Итоговая production-сборка 18.10.2026 прошла; повторно 73/73 теста и git diff --check.
+
+## 18.10.2026 (Claude Code) — разведка запасного пути и правила совместной работы
+Коммит e6dc18d проверен (73 теста, typecheck, build). Публикация не выполнена: блокировка write_stdin в Codex сохраняется и в новом треде. Добавлены COLLABORATION.md (правила для Claude Code и Codex) и MIGRATION-CLOUDFLARE.md (находки и план переноса; вход через заголовки oai-authenticated-user-* работает только на Sites). Cloudflare не затрагивался, прод и БД не менялись. Следующее: выгрузка боевой БД силами Codex (задача в MIGRATION-CLOUDFLARE.md) и решение пользователя по запасному хостингу.
+
+## 19.10.2026 (Claude Code) — подготовка переезда на Cloudflare
+Добавлены адаптер входа Cloudflare Access (app/cfAccess.ts, chatgpt-auth.ts, маршруты signin/signout), wrangler.cloudflare.jsonc, сборка `build:cloudflare`, scripts/remap-user-ids.sql. На Sites ничего не меняется: 77 тестов, typecheck, обе сборки прошли. В Cloudflare ничего не создавалось, Sites v81 и БД не менялись. Следующее: шаги из MIGRATION-CLOUDFLARE.md (D1, выгрузка БД через Codex, Access, секреты, деплой на workers.dev). Не проверено вживую: проверка JWT на реальном Access и CPU ≤10 мс.
+
+## 19.10.2026 (Claude Code) — D1 создана в Cloudflare
+По явному разрешению пользователя: wrangler login (OAuth, аккаунт Kivaon@gmail.com), создана D1 `daf-ru` (регион WEUR, id 47d1d8c3-cbab-40fd-b5f2-ce52ce8d951b, вписан в wrangler.cloudflare.jsonc), применены миграции 0000–0005. База пуста: данных из Sites нет. Worker, Access, секреты не создавались. Следующее: выгрузка БД из Sites (Codex).
+
+
+## 2026-10-19T00:08:14+03:00 — Codex: попытка штатной read-only выгрузки production D1
+Sites project appgprj_6ab23ab53a348191af22a74097e2b628: get_site подтвердил v81 и public; сайт, данные и доступ не менялись. HEAD в начале 5d200d0, рабочая папка чистая. Штатный read_database_overview вернул DB и все пять таблиц: articles, users, editor_batches, translation_map_sources, mail_jobs. Пробное read_database_table_rows(articles, limit=1, offset=0) вернуло model_projection.truncated=true, truncated_values=2, omitted_columns=0, omitted_rows=0: длинные значения обрезаются уже при одной строке, поэтому эти результаты непригодны для полного SQL/JSON снимка. Среди доступных Sites tools нет отдельного экспорта, COUNT или произвольного SELECT.
+2026-10-19T00:08:14+03:00: шаг проверки экспорта в Sites Settings через штатный UI остановлен отказом: Computer Use is not allowed to use the app 'com.openai.codex' for safety reasons. Повторных попыток и обходов не было; credential не запрашивались.
+Каталог db-snapshot не создан; SQL/JSON файлы отсутствуют. Числа строк источника до/после, число уникальных (tractate, ref), INSERT-counts, SHA-256, общий размер и сверка пяти статей не получены; полнота и консистентность снимка не подтверждены. Значения users/mail_jobs не читались и не выводились. Следующий допустимый шаг: пользователь проверяет штатный экспорт в Sites Settings; если его нет — отдельное явное разрешение на добавление и публикацию временного админского маршрута полного чтения пяти таблиц с проверками полноты. Маршрут не добавлен, публикация не выполнялась. Код не менялся; тесты/сборки не запускались, коммит не создавался.
+
+
+## 2026-10-19T00:15:07+03:00 — Codex: read-only выгрузка по TASK-db-export v2, частичный результат
+Каталог вне репозитория: /Users/kivaonmac/Documents/Codex/2026-10-12/10-12-daf-ru/outputs/db-snapshot-20261019-0011. Sites v81 не менялась. Перечислены все строки штатными read_database_table_rows(limit=1) до next_offset=null: articles=64 (уникальных tractate/ref=64), users=4, mail_jobs=21, editor_batches=10, translation_map_sources=13. Это числа перечисления; независимый COUNT до/после недоступен. users/mail_jobs полностью сохранены в JSON и INSERT-only SQL с колонками в порядке db/schema.ts; INSERT-count=4/21, проверена обратная загрузка SQLite без потери значений. articles-registry.json/csv содержат 8 коротких полей, без недоступных length(). editor_batches обрезана в 10/10 строк, translation_map_sources в 4/13, они не выгружены. SQL SELECT/count/max/length/substr инструментом не поддерживаются, N не найден.
+2026-10-19T00:15:07+03:00: публичный GET /api/articles после разрешения сети вернул HTTP 403 Forbidden; выгрузка статей остановлена, повторов, credential и обходов не было. Полная БД, согласованность снимка до/после и сверка 5 статей не подтверждены. Следующий шаг: забрать полные статьи по реестру из разрешённой пользовательской сессии; для длинных приватных таблиц нужен штатный экспорт или отдельно согласованный временный admin read-only маршрут. Код и production не менялись, тесты/сборка не требовались, коммит не создавался.
+Общий размер файлов: 101638 байт. SHA-256:
+- README.md: 320a2bd2501d105d851c188f4b19d44782502635ae8788cc97a484c015b58229
+- SHA256SUMS: 1496626e7761baec22067503995f50d8ac1a2e23fa3ce8e98cd46c8c9dd8c7ec
+- articles-registry.csv: 30241a9b2b7d181c714261000f12ff92d82f86de73b875d21fbde6f17a6ae9f0
+- articles-registry.json: cd90f24a7481ed2dd521c4222873a960aba87782e08de4dd814b503a0ab90d03
+- mail_jobs.json: 5efb70af556dbe82ea1c51b310a27c7e5a0f0e6e19de4f0a52c5444a90bcbbdd
+- mail_jobs.sql: 0ee0e01c9280936686b1f0fa39a3e1267286a98334ad3c61f04b928d5aa95c26
+- read-metadata.json: 69915493d4905e16f346134b291f13d895b29477d932f9718d549b3e34daee3b
+- report.json: 44bccf3327a3872a813431e064178460013be476d5ad2271c1399abe593d4e6d
+- users.json: 0beec93a5f067d3838ed23ef012bf6b944af14f1e99a4b711c08fd63db524f18
+- users.sql: ca6a976e849d98f3a67a7fd3f704c4c4307b97502f3624bc2757066d573c5425
+
+2026-10-19T00:15:59+03:00 — Codex: по явной просьбе пользователя повторно проверен один публичный GET /api/articles без credential. После выдачи сетевого разрешения ответ HTTP 403 Forbidden. Выгрузка статей не начата; дальнейших попыток/обходов нет, production и данные не менялись.
+
+## 19.10.2026 (Claude Code) — данные загружены в D1 daf-ru
+Статьи (64/64) получены с публичного /api/articles (Codex получил 403 из своей среды), метаданные сверены с реестром Codex, 150 Раши/31 Тосафот совпали с аудитом 11.10. По разрешению пользователя в D1 daf-ru загружены articles, users (4), mail_jobs (21, все sent) и выполнен scripts/remap-user-ids.sql (user_id → cf:<email>). НЕ перенесены: editor_batches (10) и translation_map_sources (13) — инструмент Sites обрезает длинные значения. Worker, Access и секреты ещё не созданы; Sites v81 не менялась.
+
+## 19.10.2026 (Claude Code) — воркер задеплоен на workers.dev (тест)
+Зарегистрирован поддомен kivaon.workers.dev (по просьбе пользователя), воркер daf-ru задеплоен: https://daf-ru.kivaon.workers.dev (версия 25fa72b8). Чтение проверено: /, /api/articles, статика — 200 за ~0,25–0,45 с; /admin, /translation-map, /notifications без входа → 307; /api/users → 403; ошибок лимита CPU (1102) нет на ~30 запросах. Точное CPU-время не измерено (wrangler tail событий не вернул). Вход пока не работает: в vars остались заглушки (DAFRU_ADMIN_EMAIL, CF_ACCESS_*), Access и секреты Mailjet не настроены. Sites v81 остаётся продом. Не перенесены editor_batches и translation_map_sources.
+
+## 19.10.2026 (Claude Code) — Cloudflare Access подключён
+Приложение Access защищает только daf-ru.kivaon.workers.dev/signin-with-chatgpt (политика MyPolicy: Allow, Everyone, One-time PIN). В wrangler.cloudflare.jsonc прописаны CF_ACCESS_TEAM_DOMAIN=daf-ru.cloudflareaccess.com и CF_ACCESS_AUD (не секреты). DAFRU_ADMIN_EMAIL хранится секретом воркера (не в репозитории). Деплой 7267b3f3. Проверено curl: /signin-with-chatgpt → 302 на страницу входа Access, чтение и /api/articles открыты (200), /admin без входа 307. НЕ проверено: реальный вход с OTP и признание пользователя сайтом (cookie CF_Authorization на всех путях). Секреты Mailjet не заданы (письма не уйдут).
+
+## 19.10.2026 (Claude Code) — админ после входа через Access
+Пользователь вошёл через Access под своей рабочей почтой и не получил роль admin: в базе админом был старый аккаунт с Apple-relay почтой, а рабочая почта числилась reader. Секрет DAFRU_ADMIN_EMAIL заменён, роль в D1 повышена до admin. Аккаунты с Apple-relay почтой (код One-time PIN на них, вероятно, не доходит) удаляются; старый admin-аккаунт указан автором статей — перед удалением решить, на кого перепривязать authorUserId.

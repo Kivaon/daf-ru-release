@@ -1,6 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
-import {printedRefs} from './printedSources';
+import {commentaryLabel,printedRefs} from './printedSources';
 import {sourceComments} from './sefariaLinks';
 type Item={ref:string;base:string;text:string;translation?:string;explanation?:string};
 export default function PrintedCommentary({tractate,page}:{tractate:string;page:string}){
@@ -13,5 +13,5 @@ export default function PrintedCommentary({tractate,page}:{tractate:string;page:
  })().catch(e=>{if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Не удалось загрузить комментарии');});return()=>controller.abort();
  },[tractate,page,refs]);
  if(!refs.length)return null;
- return <section className="analysisCard"><h2>Комментарии на печатной странице</h2><details open={page==='33b'}><summary>Показать продолжения ({refs.length})</summary><p>Полные тексты Sefaria и сохранённые переводы. Эти комментарии относятся к репликам других страниц; перевод хранится в исходной статье.</p>{error&&<p role="alert">{error}</p>}{!items.length&&!error?<p role="status">Получаем комментарии…</p>:items.map(item=><details key={item.ref}><summary>{item.ref} · {item.translation&&item.explanation?'переведён':error?'перевод не проверен':'требует перевода'}</summary><p dir="rtl" lang="he" className="hebrew">{item.text}</p>{item.translation&&<p>{item.translation}</p>}{item.explanation&&<p>{item.explanation}</p>}<a href={`/?tractate=${encodeURIComponent(tractate)}&daf=${item.base.split(':')[0]}&ref=${item.base}`}>Открыть статью {item.base}</a></details>)}</details></section>;
+ return <section className="analysisCard"><h2>Комментарии на печатной странице</h2><details open={page==='33b'}><summary>Показать комментарии ({refs.length})</summary><p>Полные тексты Sefaria и сохранённые переводы. Эти комментарии относятся к репликам других страниц; перевод хранится в исходной статье.</p>{error&&<p role="alert">{error}</p>}{!items.length&&!error?<p role="status">Получаем комментарии…</p>:items.map(item=><details key={item.ref}><summary>{commentaryLabel(tractate,item.ref)} · {item.translation&&item.explanation?'переведён':error?'перевод не проверен':'требует перевода'}</summary><p dir="rtl" lang="he" className="hebrew">{item.text}</p>{item.translation&&<p>{item.translation}</p>}{item.explanation&&<p>{item.explanation}</p>}<a href={`/?tractate=${encodeURIComponent(tractate)}&daf=${item.base.split(':')[0]}&ref=${item.base}`}>Открыть статью {item.base}</a></details>)}</details></section>;
 }

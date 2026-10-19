@@ -1,5 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { env } from "cloudflare:workers";
+import { fetchAccessKeys, readCookie, verifyAccessJwt } from "./cfAccess";
 
 export type ChatGPTUser = {
   userId: string;
@@ -22,7 +24,7 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
   const requestHeaders = await headers();
   const userId = requestHeaders.get(USER_ID_HEADER);
   const email = requestHeaders.get(USER_EMAIL_HEADER);
-  if (!userId || !email) return null;
+  if (!userId || !email) return getCloudflareAccessUser(requestHeaders);
 
   const encodedFullName = requestHeaders.get(USER_FULL_NAME_HEADER);
   const fullName =
@@ -36,6 +38,32 @@ export async function getChatGPTUser(): Promise<ChatGPTUser | null> {
     displayName: fullName ?? email,
     email,
     fullName,
+  };
+}
+
+/**
+ * Запасной вход вне Sites: личность из JWT Cloudflare Access (заголовок или cookie CF_Authorization).
+ * Включается переменными CF_ACCESS_TEAM_DOMAIN и CF_ACCESS_AUD; без них возвращает null.
+ * userId = "cf:" + email, чтобы идентификатор не зависел от поставщика входа.
+ */
+async function getCloudflareAccessUser(requestHeaders: Headers): Promise<ChatGPTUser | null> {
+  const vars = env as unknown as Record<string, unknown>;
+  const teamDomain = String(vars.CF_ACCESS_TEAM_DOMAIN || "");
+  const audience = String(vars.CF_ACCESS_AUD || "");
+  if (!teamDomain || !audience) return null;
+
+  const token =
+    requestHeaders.get("cf-access-jwt-assertion") ||
+    readCookie(requestHeaders.get("cookie"), "CF_Authorization");
+  if (!token) return null;
+
+  const identity = await verifyAccessJwt(token, { teamDomain, audience }, fetchAccessKeys);
+  if (!identity) return null;
+  return {
+    userId: `cf:${identity.email}`,
+    displayName: identity.name ?? identity.email,
+    email: identity.email,
+    fullName: identity.name,
   };
 }
 
@@ -87,4 +115,8 @@ function safeDecodeURIComponent(value: string): string | null {
   } catch {
     return null;
   }
+}
+
+export function safeReturnPath(value: string): string {
+  return safeRelativeReturnPath(value);
 }

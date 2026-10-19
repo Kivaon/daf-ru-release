@@ -187,6 +187,16 @@
         "ref": "Tosafot on Nazir 32a:9:1",
         "base": "32a:9",
         "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 32a:7:1",
+        "base": "32a:7",
+        "kind": "tosafot"
+      },
+      {
+        "ref": "Tosafot on Nazir 31b:10:2",
+        "base": "31b:10",
+        "kind": "tosafot"
       }
     ]
   }

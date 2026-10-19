@@ -1,0 +1,23 @@
+// Конфиг для развёртывания на Cloudflare (запасной путь вместо Sites). Сборка: npm run build:cloudflare; деплой: npx wrangler deploy --config dist/server/wrangler.json. Имя не wrangler.jsonc нарочно: иначе его подхватит сборка для Sites.
+// Секреты (DAFRU_ADMIN_EMAIL, Mailjet) задаются через `wrangler secret put`, не здесь.
+{
+  "name": "daf-ru",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-09-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "binding": "ASSETS" },
+  "images": { "binding": "IMAGES" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "daf-ru",
+      "database_id": "47d1d8c3-cbab-40fd-b5f2-ce52ce8d951b",
+      "migrations_dir": "./drizzle"
+    }
+  ],
+  "vars": {
+    "CF_ACCESS_TEAM_DOMAIN": "daf-ru.cloudflareaccess.com",
+    "CF_ACCESS_AUD": "2101a805a59d40cf1a13880d7be27f5cbaef35836c38a5dff755bcf9de2bf7d4"
+  },
+  "observability": { "enabled": true }
+}
