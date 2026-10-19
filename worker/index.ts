@@ -44,7 +44,7 @@ const worker = {
     }
 
     const response=await handler.fetch(request, env, ctx);
-    if(url.pathname.startsWith('/api/')||url.pathname==='/translation-map'||url.pathname==='/')ctx.waitUntil(deliverMail(env.DB,env).catch(()=>console.error('Mail queue unavailable')));
+    if(url.pathname.startsWith('/api/')||url.pathname==='/translation-map'||url.pathname==='/')ctx.waitUntil(deliverMail(env.DB,env,url.origin).catch(()=>console.error('Mail queue unavailable')));
     return response;
   },
 };

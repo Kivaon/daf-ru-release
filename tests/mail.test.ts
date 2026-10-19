@@ -35,13 +35,13 @@ test('delivery suppresses existing complete articles and sends a new completion 
  sql.prepare('INSERT INTO translation_map_sources VALUES(?,?,?,?)').run('Pesachim','2a',JSON.stringify([{ref:'2a:1',rashi:[],tosafot:[]}]),'now');
  await queueMail(db,'Pesachim',['2a:1']).run();
  sql.exec("INSERT INTO articles(tractate,ref,title,translation,explanation,provider,author_user_id,created_at,updated_at) VALUES('Pesachim','2a:1','Title','Translation','Explanation','AI','editor','now','now')");
- const original=globalThis.fetch;let calls=0;globalThis.fetch=(async()=>{calls++;return Response.json({Messages:[{Status:'success',To:[{MessageUUID:'id'}]}]})}) as typeof fetch;
+ const original=globalThis.fetch;let calls=0;let sentBody='';globalThis.fetch=(async(_url:unknown,options:RequestInit)=>{calls++;sentBody=String(options.body);return Response.json({Messages:[{Status:'success',To:[{MessageUUID:'id'}]}]})}) as typeof fetch;
  try{
   const config={MAILJET_API_KEY:'test',MAILJET_SECRET_KEY:'test'};
-  await deliverMail(db,config);await deliverMail(db,config);assert.equal(calls,1);assert.equal(sql.prepare('SELECT status FROM mail_jobs').get()!.status,'sent');
-  sql.exec('DELETE FROM mail_jobs');await queueMail(db,'Pesachim',['2a:1']).run();await deliverMail(db,config);assert.equal(calls,1);assert.equal(sql.prepare('SELECT status FROM mail_jobs').get()!.status,'suppressed');
+  await deliverMail(db,config,'https://reader.example.test');await deliverMail(db,config,'https://reader.example.test');assert.equal(calls,1);assert.ok(sentBody.includes('https://reader.example.test/?tractate=Pesachim&daf=2a'));assert.equal(sql.prepare('SELECT status FROM mail_jobs').get()!.status,'sent');
+  sql.exec('DELETE FROM mail_jobs');await queueMail(db,'Pesachim',['2a:1']).run();await deliverMail(db,config,'https://reader.example.test');assert.equal(calls,1);assert.equal(sql.prepare('SELECT status FROM mail_jobs').get()!.status,'suppressed');
   sql.exec("DELETE FROM mail_jobs; UPDATE articles SET explanation=''");await queueMail(db,'Pesachim',['2a:1']).run();sql.exec("UPDATE articles SET explanation='Complete'");
-  globalThis.fetch=(async()=>Response.json({Messages:[{Status:'error'}]},{status:503})) as typeof fetch;await deliverMail(db,config);
+  globalThis.fetch=(async()=>Response.json({Messages:[{Status:'error'}]},{status:503})) as typeof fetch;await deliverMail(db,config,'https://reader.example.test');
   const job=sql.prepare('SELECT status,attempts,next_at,lease FROM mail_jobs').get()!;assert.equal(job.status,'pending');assert.equal(job.attempts,1);assert.equal(job.lease,null);assert.ok(Number(job.next_at)>Date.now());assert.equal(sql.prepare('SELECT explanation FROM articles').get()!.explanation,'Complete');
  }finally{globalThis.fetch=original;}
 });

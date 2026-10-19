@@ -4,7 +4,8 @@ import type {SavedRow} from '../app/batchModel.ts';
 import type {Requirement} from '../app/translationMapModel.ts';
 import {loadBundle} from '../app/batchSources.ts';
 import {TRACTATES} from '../app/talmudCatalog.ts';
-export async function deliverMail(db:D1Database,config:MailConfig){
+import {articleMailLink} from './mailLinks.ts';
+export async function deliverMail(db:D1Database,config:MailConfig,siteOrigin:string){
  if(!config.MAILJET_API_KEY||!config.MAILJET_SECRET_KEY)return;
  const now=Date.now(),job=await db.prepare("SELECT * FROM mail_jobs WHERE status='pending' AND next_at<=? ORDER BY created_at LIMIT 1").bind(now).first<{id:string;tractate:string;refs_json:string;before_json:string;attempts:number}>();
  if(!job)return;const lease=crypto.randomUUID();
@@ -28,7 +29,7 @@ export async function deliverMail(db:D1Database,config:MailConfig){
   }
   const author=await db.prepare('SELECT name FROM users WHERE user_id=(SELECT author_user_id FROM articles WHERE tractate=? AND ref=?)').bind(job.tractate,refs[0]).first<{name:string}>();
   const tractate=TRACTATES.find(t=>t.sefaria===job.tractate)?.ru||job.tractate;
-  const link=`https://daf-ru.mffkk78khq.chatgpt.site/?tractate=${encodeURIComponent(job.tractate)}&daf=${refs[0].split(':')[0]}`;
+  const link=articleMailLink(siteOrigin,job.tractate,refs[0]);
   const messageId=await sendMail(config,job.id,`DAF-RU: ${tractate} ${refs.join(', ')} — статья готова`,`${rows[0].title}\n\nТрактат: ${tractate}\nРеплики: ${refs.join(', ')}\nРедактор: ${author?.name||'Редактор DAF-RU'}\n\nПеревод, объяснение и предусмотренные источником комментарии заполнены.\n\nОткрыть страницу: ${link}`);
   await db.prepare("UPDATE mail_jobs SET status='sent',message_id=?,lease=NULL,error=NULL WHERE id=? AND lease=?").bind(messageId,job.id,lease).run();
  }catch(error){
