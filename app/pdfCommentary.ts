@@ -88,9 +88,11 @@ export function columnOrder<T extends { left: number; width: number; top: number
 const withoutNun = (word: string) => word.replace(/[נן]/g, "");
 const sameLoosely = (source: string, printed: string) => sameEditionWord(source, printed) || (printed.length > 0 && withoutNun(source).length >= 2 && sameEditionWord(withoutNun(source), withoutNun(printed)));
 
+export type FoundDibur<T> = { words: T[]; opening: string[]; whole: boolean };
+
 export function findDiburim<T extends { word: string }>(pdfWords: T[], comments: CommentLike[]) {
-  if (!comments.length || !pdfWords.length) return {} as Record<string, T[]>;
-  const blocks: Record<string, T[]> = {};
+  if (!comments.length || !pdfWords.length) return {} as Record<string, FoundDibur<T>>;
+  const blocks: Record<string, FoundDibur<T>> = {};
   const target = pdfWords.map((word) => normalizeHebrew(word.word));
   // Last token index of the printed word that spells `sourceWord`, starting at `from`.
   const spell = (sourceWord: string, from: number) => {
@@ -105,10 +107,10 @@ export function findDiburim<T extends { word: string }>(pdfWords: T[], comments:
   comments.forEach((comment) => {
     const words = editionWords(comment.dibur).filter((word) => !["גמ", "מתני"].includes(word));
     if (!words.length) return;
-    let best: { first: number; last: number; count: number } | undefined;
+    let best: { first: number; last: number; count: number; skipped: number } | undefined;
     // The printed dibur may begin a word or two later than Sefaria's, which quotes
     // the Gemara from its start, so a search may also begin at the second or third word.
-    for (const skipped of words.length >= 5 ? [0, 1, 2] : words.length >= 4 ? [0, 1] : [0]) {
+    for (const skipped of words.length >= 5 ? [0, 1, 2] : words.length >= 3 ? [0, 1] : [0]) {
       const source = words.slice(skipped);
       for (let start = 0; start < target.length; start++) {
         let last = spell(source[0], start);
@@ -121,10 +123,55 @@ export function findDiburim<T extends { word: string }>(pdfWords: T[], comments:
           last = found; count++;
         }
         if (count / words.length < .58 || (skipped && count < 2)) continue;
-        if (!best || count > best.count || (count === best.count && last - start < best.last - best.first)) best = { first: start, last, count };
+        if (!best || count > best.count || (count === best.count && last - start < best.last - best.first)) best = { first: start, last, count, skipped };
       }
     }
-    if (best) blocks[comment.ref] = pdfWords.slice(best.first, best.last + 1);
+    if (best) blocks[comment.ref] = { words: pdfWords.slice(best.first, best.last + 1), opening: words.slice(0, best.skipped).reverse(), whole: best.count === words.length };
   });
   return blocks;
+}
+
+type Placed = { word: string; left: number; width: number; top: number; height: number };
+
+// The first words of a printed dibur are often set larger than the rest, in a
+// font outside the commentary size band. When a dibur was found without them,
+// take the matching words standing immediately to its right on the same line.
+export function addOpeningWords<T extends Placed>(found: Record<string, FoundDibur<T>>, candidates: T[], zoom: number) {
+  return Object.fromEntries(Object.entries(found).map(([ref, dibur]) => {
+    let words = dibur.words;
+    for (const opening of dibur.opening) {
+      const first = words[0];
+      const line = first.top + first.height;
+      const next = candidates
+        .filter((candidate) => !words.includes(candidate) && sameEditionWord(opening, normalizeHebrew(candidate.word))
+          && Math.abs(candidate.top + candidate.height - line) <= 4 * zoom
+          && candidate.left >= first.left + first.width - 2 * zoom && candidate.left - (first.left + first.width) <= 40 * zoom)
+        .sort((a, b) => a.left - b.left)[0];
+      if (!next) break;
+      words = [next, ...words];
+    }
+    return [ref, words];
+  })) as Record<string, T[]>;
+}
+
+// Rashi stands on one side of the Gemara and Tosafot on the other, both on the
+// whole page. The side of each commentator is learned from the diburim that
+// match unambiguously, then the search is repeated within that side only and
+// takes precedence, so a dibur that Rashi and Tosafot both begin with is not
+// taken from the wrong one.
+export function findCommentary<T extends { word: string; left: number; width: number }>(pdfWords: T[], comments: Array<CommentLike & { commentator: string }>, pageCenter: number) {
+  const sideOf = (word: T) => (word.left + word.width / 2 < pageCenter ? "left" : "right");
+  const result: Record<string, FoundDibur<T>> = {};
+  for (const commentator of new Set(comments.map((comment) => comment.commentator))) {
+    const own = comments.filter((comment) => comment.commentator === commentator);
+    const first = findDiburim(pdfWords, own);
+    const votes = { left: 0, right: 0 };
+    Object.values(first).filter((dibur) => dibur.whole).forEach((dibur) => { votes[sideOf(dibur.words[0])]++; });
+    const total = votes.left + votes.right;
+    const side = total >= 3 && Math.max(votes.left, votes.right) / total >= .7 ? (votes.left > votes.right ? "left" : "right") : undefined;
+    // Near the page bottom the columns widen under the Gemara, so a dibur that
+    // is not found on its own side is taken from the unrestricted search.
+    Object.assign(result, first, side ? findDiburim(pdfWords.filter((word) => sideOf(word) === side), own) : {});
+  }
+  return result;
 }

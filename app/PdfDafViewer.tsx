@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CommentaryLink } from "./bekhorot2aCommentary";
 import { tokenLeft } from "./pdfWordOrder";
-import { columnOrder, decodeWord, editionWords, findDiburim, normalizeHebrew, sameEditionWord } from "./pdfCommentary";
+import { addOpeningWords as addDiburOpening, columnOrder, decodeWord, editionWords, findCommentary, normalizeHebrew, sameEditionWord } from "./pdfCommentary";
 
 export type DafSegment = { id: string; kind: string; text: string };
 
@@ -127,6 +127,22 @@ function alignSefariaToPdf(pdfWords: WordRect[], segments: DafSegment[]) {
 // Display words such as מתני׳ / גמ׳ and a Mishnah's oversized opening word can
 // use another font in the Vilna PDF. Add only nearby, text-confirmed candidates
 // after the main continuous alignment has established the semantic block.
+// The sheet comes through our proxy from a third-party server; without a time
+// limit a stalled answer leaves the page on "loading" forever.
+async function fetchPdf(url: string) {
+  let failure = "Сервер листов не ответил. Обновите страницу.";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+    try {
+      const response = await fetch(url, { cache: "force-cache", credentials: "same-origin", signal: controller.signal });
+      if (response.ok) return response;
+      failure = `PDF request failed: ${response.status}`;
+    } catch { /* retry once, then report */ } finally { clearTimeout(timer); }
+  }
+  throw new Error(failure);
+}
+
 const asBlocks = (found: Record<string, WordRect[]>) => Object.fromEntries(Object.entries(found).map(([ref, words]) => [ref, { words, lines: lineRects(words) }])) as Record<string, LocatedBlock>;
 
 function addOpeningWords(blocks:Record<string,LocatedBlock>, candidates:WordRect[], segments:DafSegment[], zoom:number) {
@@ -189,8 +205,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     async function renderPdf() {
       try {
         setStatus("loading"); setErrorMessage(""); setAlignmentWarning("");
-        const [pdfjsApi, response] = await Promise.all([loadPdfJs(), fetch(pdfUrl, { cache: "force-cache", credentials: "same-origin" })]);
-        if (!response.ok) throw new Error(`PDF request failed: ${response.status}`);
+        const [pdfjsApi, response] = await Promise.all([loadPdfJs(), fetchPdf(pdfUrl)]);
         pdfjsApi.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js?v=3";
         const pdf = await pdfjsApi.getDocument({ data: new Uint8Array(await response.arrayBuffer()) }).promise as {
           getPage: (pageNumber: number) => Promise<{
@@ -265,8 +280,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
           locatedBlocks = addOpeningWords(alignment.blocks, openingCandidates, segments, zoom);
           mappingNotice = alignment.warnings.join(" · ");
           locatedCommentary = {
-            ...asBlocks(findDiburim(commentaryWords, commentary.filter((comment) => comment.commentator === "Rashi"))),
-            ...asBlocks(findDiburim(commentaryWords, commentary.filter((comment) => comment.commentator === "Tosafot"))),
+            ...asBlocks(addDiburOpening(findCommentary(commentaryWords, commentary, viewport.width / 2), makeWords((item) => isOnPage(item)), zoom)),
           };
         } catch (reason) {
           mappingError = reason instanceof Error ? reason.message : String(reason);
