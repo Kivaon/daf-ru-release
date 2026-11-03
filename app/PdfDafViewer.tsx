@@ -6,6 +6,7 @@ import { tokenLeft } from "./pdfWordOrder";
 import { addOpeningWords as addDiburOpening, decodeWord, editionWords, normalizeHebrew, sameEditionWord, splitColumns } from "./pdfCommentary";
 import { locateCommentary } from "./pdfLocate";
 import { centerScroll } from "./pdfScroll";
+import { commentarySizes, sizeOf } from "./pdfSizes";
 
 export type DafSegment = { id: string; kind: string; text: string };
 
@@ -293,7 +294,12 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         // words of the Gemara itself, so only that size band is searched.
         // Diburim are also set in a larger bold face (taller than the Gemara, in a
         // font of its own); those words belong to the commentary stream too.
-        const commentaryColumns = splitColumns(makeWords((item) => isOnPage(item) && ((item.height >= 9.5 && item.height < gemaraHeight - 1.5) || (item.height > gemaraHeight + .4 && item.height < gemaraHeight + 4.5 && item.fontName !== gemaraFont))), 3.5 * zoom, 7 * zoom, makeWords((item) => isOnPage(item) && item.height < 9.5));
+        // The size of Rashi and Tosafot differs from sheet to sheet, so it is read from the sheet itself: the sizes
+        // whose words are nearly all words of the comments (see pdfSizes.ts).
+        const sizes = commentarySizes(items.filter(isOnPage).flatMap((item) => Array.from(item.str.matchAll(/\S+/g)).map((match) => ({ word: decodeWord(match[0]), height: item.height, font: item.fontName }))), [...commentary, ...neighborComments], gemaraFont);
+        // (the sizes read from the sheet, and also the usual band between the notes and the Gemara)
+        const isCommentarySize = (item: typeof items[number]) => (item.fontName !== gemaraFont && sizes.has(sizeOf(item.height))) || (item.height >= 9.5 && item.height < gemaraHeight - 1 && !(item.height >= 11.8 && item.fontName === gemaraFont));
+        const commentaryColumns = splitColumns(makeWords((item) => isOnPage(item) && (isCommentarySize(item) || (item.height > gemaraHeight + .4 && item.height < gemaraHeight + 4.5 && item.fontName !== gemaraFont))), 3.5 * zoom, 7 * zoom, makeWords((item) => isOnPage(item) && item.height < 9.5 && !isCommentarySize(item)));
         let locatedBlocks: Record<string, LocatedBlock> = {}, locatedCommentary: Record<string, LocatedBlock> = {}, locatedZones: Array<TextRect & { ref: string }> = [], mappingError = "", mappingNotice = "";
         try {
           const alignment = segments.length?alignSefariaToPdf(pdfWords, segments):{blocks:{},warnings:[]};
