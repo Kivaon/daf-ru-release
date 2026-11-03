@@ -49,7 +49,11 @@ export function sameEditionWord(first: string, second: string) {
 // `fillers` are other printed marks (footnote markers and the like) that are not
 // searched: a line is not split at a gap of up to seven times `gap` when one of
 // them stands in it.
-export function splitColumns<T extends { left: number; width: number; top: number; height: number }>(words: T[], tolerance: number, gap: number, fillers: T[] = []): T[][] {
+// Lines across most of the sheet's width (the commentary above and below the Gemara,
+// across both columns) are gathered into columns of their own: joined to a narrow
+// column they would stretch it over the neighbouring column, whose lines would then
+// be read in between them.
+export function splitColumns<T extends { left: number; width: number; top: number; height: number }>(words: T[], tolerance: number, gap: number, fillers: T[] = [], wideShare = .55): T[][] {
   const filler = new Set<T>(fillers);
   const baseline = (word: T) => word.top + word.height;
   const rows: T[][] = [];
@@ -60,25 +64,28 @@ export function splitColumns<T extends { left: number; width: number; top: numbe
   }
   type Fragment = { words: T[]; left: number; right: number };
   type Column = { left: number; right: number; fragments: Fragment[] };
-  const columns: Column[] = [];
+  const fragments: Fragment[] = [];
   for (const row of rows) {
     row.sort((a, b) => b.left - a.left);
-    const fragments: Fragment[] = [];
     let current: T[] = [];
     let bridged = false;
+    const flush = () => { if (current.length) fragments.push({ words: current, left: Math.min(...current.map((word) => word.left)), right: Math.max(...current.map((word) => word.left + word.width)) }); };
     for (const word of row) {
       if (filler.has(word)) { bridged = true; continue; }
       const previous = current.at(-1);
       const span = previous ? previous.left - (word.left + word.width) : 0;
       const bridge = bridged && span <= gap * 7;
-      if (previous && !bridge && span > gap) { fragments.push({ words: current, left: 0, right: 0 }); current = [word]; } else current.push(word);
+      if (previous && !bridge && span > gap) { flush(); current = [word]; } else current.push(word);
       bridged = false;
     }
-    if (!current.length) continue;
-    fragments.push({ words: current, left: 0, right: 0 });
-    for (const fragment of fragments) {
-      fragment.left = Math.min(...fragment.words.map((word) => word.left));
-      fragment.right = Math.max(...fragment.words.map((word) => word.left + word.width));
+    flush();
+  }
+  if (!fragments.length) return [];
+  const sheetLeft = Math.min(...fragments.map((fragment) => fragment.left)), sheetRight = Math.max(...fragments.map((fragment) => fragment.right));
+  const isWide = (fragment: Fragment) => fragment.right - fragment.left > wideShare * (sheetRight - sheetLeft);
+  const columnsOf = (group: Fragment[]) => {
+    const columns: Column[] = [];
+    for (const fragment of group) {
       let best: Column | undefined, bestShare = .5;
       for (const column of columns) {
         const share = (Math.min(column.right, fragment.right) - Math.max(column.left, fragment.left)) / Math.min(column.right - column.left, fragment.right - fragment.left);
@@ -88,7 +95,9 @@ export function splitColumns<T extends { left: number; width: number; top: numbe
       best.fragments.push(fragment);
       best.left = Math.min(best.left, fragment.left); best.right = Math.max(best.right, fragment.right);
     }
-  }
+    return columns;
+  };
+  const columns = [...columnsOf(fragments.filter((fragment) => !isWide(fragment))), ...columnsOf(fragments.filter(isWide))];
   return columns.sort((a, b) => b.right - a.right).map((column) => column.fragments.flatMap((fragment) => fragment.words));
 }
 

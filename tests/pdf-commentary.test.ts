@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {addOpeningWords,columnOrder,findCommentary,findDiburim,labelColumns} from '../app/pdfCommentary.ts';
+import {addOpeningWords,columnOrder,findCommentary,findDiburim,labelColumns,splitColumns} from '../app/pdfCommentary.ts';
 
 const word=(text:string,left:number,baseline:number)=>({word:text,left,top:baseline-10,width:20,height:10});
 
@@ -80,4 +80,15 @@ test('the Mishnah / Gemara sign before a dibur goes with the dibur',()=>{
  const elsewhere={...word("גמ'",528,300)};
  const result=addOpeningWords(found,[sign,elsewhere,...found.r.words],1);
  assert.deepEqual(result.r.map(x=>x.word),["מתני'",'אותו','ולא','בנו']);
+});
+
+test('a line across both columns does not join them: its neighbours keep to their own column',()=>{
+ const box=(name:string,left:number,width:number,baseline:number)=>({word:name,left,width,top:baseline-10,height:10});
+ const wide=[box('w1',320,30,20),box('w2',290,30,20),box('w3',260,30,20),box('w4',230,30,20),box('w5',200,30,20),box('w6',170,30,20),box('w7',140,30,20),box('w8',110,30,20),box('w9',80,30,20)];
+ const rows=[0,1,2].flatMap((i)=>[box(`r${i}a`,330,40,60+i*12),box(`r${i}b`,285,40,60+i*12),box(`l${i}a`,80,40,60+i*12),box(`l${i}b`,125,40,60+i*12)]);
+ const columns=splitColumns([...wide,...rows],3.5,7);
+ const names=columns.map((column)=>column.map((w)=>w.word[0]).join(''));
+ assert.equal(columns.length,3);
+ assert.ok(names.some((n)=>/^w+$/.test(n)),'the wide line is a column of its own');
+ assert.ok(names.some((n)=>/^r+$/.test(n))&&names.some((n)=>/^l+$/.test(n)));
 });
