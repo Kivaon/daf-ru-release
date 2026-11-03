@@ -11,7 +11,7 @@ export type DafSegment = { id: string; kind: string; text: string };
 type TextRect = { left: number; top: number; width: number; height: number };
 type WordRect = TextRect & { word: string; line: number; font: string };
 type LocatedBlock = { lines: TextRect[]; words: WordRect[] };
-type PdfJsApi = { GlobalWorkerOptions: { workerSrc: string }; getDocument: (source: { data: Uint8Array }) => { promise: Promise<unknown> } };
+type PdfJsApi = { GlobalWorkerOptions: { workerSrc: string }; getDocument: (source: { data: Uint8Array }) => { promise: Promise<unknown>; destroy?: () => unknown } };
 
 function loadPdfJs() {
   const host = window as typeof window & { pdfjsLib?: PdfJsApi };
@@ -201,18 +201,24 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [blocks, setBlocks] = useState<Record<string, LocatedBlock>>({});
   const [commentaryBlocks, setCommentaryBlocks] = useState<Record<string, LocatedBlock>>({});
   const [commentaryZones, setCommentaryZones] = useState<Array<TextRect & { ref: string }>>([]);
+  const [replyHits, setReplyHits] = useState<Record<string, WordRect[]>>({});
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
   const [hoveredComment, setHoveredComment] = useState<string | null>(null);
   const [pageTip, setPageTip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    // every opened document starts its own worker thread; it is closed as soon as the
+    // sheet is drawn (or abandoned), otherwise the workers pile up while pages are turned
+    let loadingTask: { destroy?: () => unknown } | undefined;
     async function renderPdf() {
       try {
         setStatus("loading"); setErrorMessage(""); setAlignmentWarning("");
         const [pdfjsApi, response] = await Promise.all([loadPdfJs(), fetchPdf(pdfUrl)]);
         pdfjsApi.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js?v=3";
-        const pdf = await pdfjsApi.getDocument({ data: new Uint8Array(await response.arrayBuffer()) }).promise as {
+        const task0 = pdfjsApi.getDocument({ data: new Uint8Array(await response.arrayBuffer()) });
+        loadingTask = task0;
+        const pdf = await task0.promise as {
           getPage: (pageNumber: number) => Promise<{
             getViewport: (options: { scale: number }) => { width: number; height: number; transform: number[] };
             getTextContent: () => Promise<{ items: Array<Record<string, unknown>>; styles: Record<string, { fontFamily?: string }> }>;
@@ -287,8 +293,12 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
           locatedBlocks = addOpeningWords(alignment.blocks, openingCandidates, segments, zoom);
           mappingNotice = alignment.warnings.join(" · ");
           const located = locateCommentary(commentaryColumns, commentary, neighborComments);
-          locatedCommentary = asBlocks(addDiburOpening(located.diburs, makeWords((item) => isOnPage(item)), zoom));
+          const opened = addDiburOpening(located.diburs, makeWords((item) => isOnPage(item)), zoom);
+          locatedCommentary = asBlocks(opened);
           located.zones.forEach((ref, word) => locatedZones.push({ ref, left: word.left, top: word.top, width: word.width, height: word.height }));
+          // the large first words and the "גמ'" / "מתני'" sign belong to their dibur too
+          // (in front, so that they win over the alignment, which may give them to the comment before)
+          locatedZones.unshift(...Object.entries(opened).flatMap(([ref, words]) => words.filter((word) => !located.zones.has(word as never)).map((word) => ({ ref, left: word.left, top: word.top, width: word.width, height: word.height }))));
         } catch (reason) {
           mappingError = reason instanceof Error ? reason.message : String(reason);
         }
@@ -298,11 +308,14 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         canvas.width = Math.floor(viewport.width * ratio); canvas.height = Math.floor(viewport.height * ratio);
         canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
         setSize({ width: viewport.width, height: viewport.height }); setBlocks(locatedBlocks); setCommentaryBlocks(locatedCommentary); setCommentaryZones(locatedZones);
+        // a word that is part of a comment's dibur answers to the comment, even if it is also a word of the reply
+        setReplyHits(Object.fromEntries(Object.entries(locatedBlocks).map(([id, block]) => [id, block.words.filter((word) => { const x = word.left + word.width / 2, y = word.top + word.height / 2; return !locatedZones.some((zone) => x >= zone.left && x <= zone.left + zone.width && y >= zone.top && y <= zone.top + zone.height); })])));
         renderTaskRef.current?.cancel();
         const context = canvas.getContext("2d", { alpha: false });
         if (!context) throw new Error("Canvas unavailable");
         const task = page.render({ canvas, canvasContext: context, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] });
         renderTaskRef.current = task; await task.promise;
+        void loadingTask?.destroy?.(); loadingTask = undefined;
         if (!cancelled) { setStatus("ready"); setAlignmentWarning(textLayerError || mappingError || mappingNotice); if (!mappingError) { const available=Object.keys(locatedBlocks); onBlockLocated(locatedBlocks[selectedBlock] ? selectedBlock : (landingEdge==="end" ? available.at(-1) : available[0])); } }
       } catch (error) {
         if (!cancelled && (error as { name?: string }).name !== "RenderingCancelledException") {
@@ -311,7 +324,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
       }
     }
     renderPdf();
-    return () => { cancelled = true; renderTaskRef.current?.cancel(); };
+    return () => { cancelled = true; renderTaskRef.current?.cancel(); void loadingTask?.destroy?.(); };
   }, [zoom, onBlockLocated, pdfUrl, segments, commentary, neighborComments, landingEdge]);
 
   const selected = blocks[selectedBlock];
@@ -321,6 +334,8 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const commentBases = allComments.reduce<Record<string, string[]>>((result, comment) => { (result[comment.ref] ??= []).push(comment.base); return result; }, {});
   const uniqueComments = allComments.filter((comment, index, all) => all.findIndex((other) => other.ref === comment.ref) === index);
   const linkedRefs = new Set(linkedComments.map((comment) => comment.ref));
+  // pointing at a reply also shows the diburim of its comments, as pointing at a comment shows its reply
+  const previewedRefs = new Set(commentary.filter((comment) => hoveredBlock && comment.base === hoveredBlock).map((comment) => comment.ref));
   const hoveredBases = hoveredComment ? commentBases[hoveredComment] ?? [] : [];
   const previews = [
     ...(hoveredBlock && hoveredBlock !== selectedBlock ? [blocks[hoveredBlock]] : []),
@@ -335,7 +350,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     {status === "ready" && <div className="pdfInteraction" aria-label="Интерактивный слой оригинального листа" data-active-comment={hoveredComment ?? ""}>
       {selected?.lines.map((rect, index) => <span key={`selected-${index}`} className="textHighlight selectedHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />)}
       {previews.flatMap((block, blockIndex) => block.lines.map((rect, index) => <span key={`preview-${blockIndex}-${index}`} className="textHighlight hoverHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
-      {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
+      {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || previewedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
       <div className="commentaryPad" onPointerMove={(event) => {
         const box = event.currentTarget.getBoundingClientRect();
         const x = event.clientX - box.left, y = event.clientY - box.top;
@@ -352,7 +367,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         if (target) onSelect(target, "");
       }} />
       {pageTip && <div className="pageTip" style={{ left: pageTip.x, top: pageTip.y }}>{pageTip.text}</div>}
-      {Object.entries(blocks).flatMap(([blockId, block]) => block.words.map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
+      {Object.entries(blocks).flatMap(([blockId, block]) => (replyHits[blockId] ?? block.words).map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
     </div>}
   </div>;
 }
