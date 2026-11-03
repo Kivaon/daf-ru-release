@@ -346,6 +346,11 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     ...(hoveredBlock && hoveredBlock !== selectedBlock ? [blocks[hoveredBlock]] : []),
     ...hoveredBases.filter((base) => base !== selectedBlock).map((base) => blocks[base]),
   ].filter(Boolean);
+  const zoneAt = (event: { clientX: number; clientY: number; currentTarget: HTMLElement }) => {
+    const box = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - box.left, y = event.clientY - box.top;
+    return { x, y, zone: commentaryZones.find((rect) => x >= rect.left - 1 && x <= rect.left + rect.width + 1 && y >= rect.top - 1 && y <= rect.top + rect.height + 1) };
+  };
   const tractateLabel=label.replace(/\s+\d+[аб]$/,"");
   return <div className="pdfStage" style={{ width: size.width, height: size.height }}>
     <canvas ref={canvasRef} aria-label={`Оригинальный PDF, ${label}`} />
@@ -357,17 +362,17 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
       {previews.flatMap((block, blockIndex) => block.lines.map((rect, index) => <span key={`preview-${blockIndex}-${index}`} className="textHighlight hoverHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
       {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || previewedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}${linkedRefs.has(comment.ref) ? "" : " previewDibur"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
       <div className="commentaryPad" onPointerMove={(event) => {
-        const box = event.currentTarget.getBoundingClientRect();
-        const x = event.clientX - box.left, y = event.clientY - box.top;
-        const zone = commentaryZones.find((rect) => x >= rect.left - 1 && x <= rect.left + rect.width + 1 && y >= rect.top - 1 && y <= rect.top + rect.height + 1);
+        const { zone, x, y } = zoneAt(event);
         setHoveredComment(zone?.ref ?? null);
         const comment = zone ? allComments.find((item) => item.ref === zone.ref) : undefined;
         if (zone && comment && neighborRefs.has(zone.ref)) setPageTip({ x: x + 12, y: y + 16, text: `${comment.commentator === "Rashi" ? "Раши" : "Тосафот"} · см. ${comment.base.split(":")[0].replace(/a$/, "а").replace(/b$/, "б")}` });
         else setPageTip(null);
-      }} onPointerLeave={() => { setHoveredComment(null); setPageTip(null); }} onClick={() => {
-        if (!hoveredComment) return;
-        if (neighborRefs.has(hoveredComment)) { const comment = allComments.find((item) => item.ref === hoveredComment); if (comment) onOpenPage?.(comment.base.split(":")[0], comment.base); return; }
-        const bases = commentBases[hoveredComment] ?? [];
+      }} onPointerLeave={() => { setHoveredComment(null); setPageTip(null); }} onClick={(event) => {
+        // the place is taken from the click itself: a finger moves nothing before it touches
+        const ref = zoneAt(event).zone?.ref;
+        if (!ref) return;
+        if (neighborRefs.has(ref)) { const comment = allComments.find((item) => item.ref === ref); if (comment) onOpenPage?.(comment.base.split(":")[0], comment.base); return; }
+        const bases = commentBases[ref] ?? [];
         const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]);
         if (target) onSelect(target, "");
       }} />
