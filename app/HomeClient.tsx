@@ -15,6 +15,7 @@ import AboutProject from "./AboutProject";
 import PrintPage from "./PrintPage";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PdfDafViewer, DafSegment } from "./PdfDafViewer";
+import { PanZoom } from "./PanZoom";
 import { CommentaryLink } from "./bekhorot2aCommentary";
 import { TRACTATES, tractateBySefaria } from "./talmudCatalog";
 
@@ -94,14 +95,10 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   const [blockLocated, setBlockLocated] = useState(false);
   const [zoom, setZoom] = useState(1.5);
   const [dictionaryOpen, setDictionaryOpen] = useState(false);
-  // phone layout (max-width 640px): the menu behind the burger, the sheet at the page's width, the full-screen reading mode
+  // phone layout (max-width 640px): the menu behind the burger, the sheet in a frame that is moved and enlarged with the fingers
   const [isMobile, setIsMobile] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [headerHidden, setHeaderHidden] = useState(false);
-  const [reader, setReader] = useState(false);
-  const [readerZoom, setReaderZoom] = useState(1.3);
-  const [fitZoom, setFitZoom] = useState(.55);
-  const viewportRef = useRef<HTMLDivElement>(null);
   const [words, setWords] = useState<string[]>([]);
   const [picked, setPicked] = useState<{ text:string; x:number; y:number } | null>(null);
   const [generatedArticle, setGeneratedArticle] = useState<GeneratedArticle | null>(null);
@@ -376,18 +373,8 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     return () => query.removeEventListener("change", apply);
   }, []);
   useEffect(() => {
-    if (!isMobile) { setMenuOpen(false); setReader(false); setHeaderHidden(false); }
+    if (!isMobile) { setMenuOpen(false); setHeaderHidden(false); }
   }, [isMobile]);
-  // the sheet takes the width of the page; the PDF is 644 units wide
-  useEffect(() => {
-    const element = viewportRef.current;
-    if (!isMobile || !element) return;
-    const measure = () => setFitZoom(Math.max(.4, Math.min(1.2, (element.clientWidth - 12) / 644)));
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [isMobile, reader]);
   // the header goes away when the page is scrolled down and comes back when it is scrolled up
   useEffect(() => {
     if (!isMobile) return;
@@ -409,21 +396,19 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     return () => document.removeEventListener("close", closed, true);
   }, [menuOpen]);
   useEffect(() => {
-    if (!reader && !menuOpen) return;
-    const previous = document.body.style.overflow;
-    if (reader) document.body.style.overflow = "hidden";
-    const close = (event: KeyboardEvent) => { if (event.key === "Escape") { setReader(false); setMenuOpen(false); } };
+    if (!menuOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setMenuOpen(false); };
     window.addEventListener("keydown", close);
-    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", close); };
-  }, [reader, menuOpen]);
-  const sheetViewer = (sheetZoom: number) => <PdfDafViewer zoom={sheetZoom} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={status==="ready"?segments:EMPTY_SEGMENTS} commentary={status==="ready"?comments:EMPTY_COMMENTS} neighborComments={status==="ready"?neighborComments:EMPTY_COMMENTS} onOpenPage={openComment} dataReady={status==="error"||(status==="ready"&&(segments.length===0||segments[0].id.startsWith(`${pageKey}:`)))}/>;
+    return () => window.removeEventListener("keydown", close);
+  }, [menuOpen]);
+  const sheetViewer = (sheetZoom: number, onFocus?: (box: { left: number; top: number; width: number; height: number }) => void) => <PdfDafViewer zoom={sheetZoom} onFocus={onFocus} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={status==="ready"?segments:EMPTY_SEGMENTS} commentary={status==="ready"?comments:EMPTY_COMMENTS} neighborComments={status==="ready"?neighborComments:EMPTY_COMMENTS} onOpenPage={openComment} dataReady={status==="error"||(status==="ready"&&(segments.length===0||segments[0].id.startsWith(`${pageKey}:`)))}/>;
 
   return <main className={canEditArticles?"editorMode":"readerMode"}>
-    <header className={`topbar${headerHidden&&!menuOpen?" topbarHidden":""}`}><div className="brand"><span className="brandMark">דף</span><span>Daf-Ru</span></div><button className="menuToggle" aria-label="Меню" aria-expanded={menuOpen} aria-controls="mainMenu" onClick={()=>setMenuOpen(v=>!v)}>{menuOpen?"✕":"☰"}</button><div className={`account${menuOpen?" open":""}`} id="mainMenu" onClick={(event)=>{const target=event.target as HTMLElement;if(target.closest(".aboutProjectButton"))return;if(target.closest("a,button"))setMenuOpen(false);}}>{user?<><span title={user.email}>{user.name}</span>{user.role==="admin"&&<button className="iconButton" onClick={openUsers}>Пользователи</button>}<a className="accountLink" href={signOutHref} target="_top">Выйти</a></>:<a className="signInButton" href={signInHref} target="_top">Войти</a>}<button className="iconButton" onClick={()=>setDictionaryOpen(true)} aria-label="Открыть словарь">⌘ <span>Словарь</span>{words.length>0&&<b>{words.length}</b>}</button>{canEditArticles&&<a className="mapNavLink" href="/translation-map">Карта перевода</a>}<a className="menuOnly" href={pdfUrl} target="_blank" rel="noopener noreferrer">PDF листа для печати</a><AboutProject /></div></header>
+    <header className={`topbar${headerHidden&&!menuOpen?" topbarHidden":""}`}><div className="brand"><span className="brandMark">דף</span><span>Daf-Ru</span></div><div className="mobileActions">{user?<><span className="mobileEmail" title={user.email}>{user.email}</span><a className="mobileIcon" href={signOutHref} target="_top" aria-label="Выйти"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="M16 8l4 4-4 4M20 12H9"/></svg></a></>:<a className="mobileIcon" href={signInHref} target="_top" aria-label="Войти"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h11"/></svg></a>}<button className="menuToggle" aria-label="Меню" aria-expanded={menuOpen} aria-controls="mainMenu" onClick={()=>setMenuOpen(v=>!v)}>{menuOpen?"✕":"☰"}</button></div><div className={`account${menuOpen?" open":""}`} id="mainMenu" onClick={(event)=>{const target=event.target as HTMLElement;if(target.closest(".aboutProjectButton"))return;if(target.closest("a,button"))setMenuOpen(false);}}>{user?<><span title={user.email}>{user.name}</span>{user.role==="admin"&&<button className="iconButton" onClick={openUsers}>Пользователи</button>}<a className="accountLink" href={signOutHref} target="_top">Выйти</a></>:<a className="signInButton" href={signInHref} target="_top">Войти</a>}<button className="iconButton" onClick={()=>setDictionaryOpen(true)} aria-label="Открыть словарь">⌘ <span>Словарь</span>{words.length>0&&<b>{words.length}</b>}</button>{canEditArticles&&<a className="mapNavLink" href="/translation-map">Карта перевода</a>}<a className="menuOnly" href={pdfUrl} target="_blank" rel="noopener noreferrer">PDF листа для печати</a><AboutProject /></div></header>
     <section className="workspace"><aside className="sourcePane dafPane" onPointerDown={()=>setPicked(null)}>
       <nav className="dafNavigation compactNavigation" aria-label="Навигация по Талмуду"><button disabled={isFirst} onClick={()=>move(-1)} aria-label="Предыдущая страница">←</button><label><select value={tractateTitle} aria-label="Трактат" onChange={(e)=>{setLandingEdge("start");setTractateTitle(e.target.value);setDaf(2);setSide("a");}}>{TRACTATES.map((item)=><option key={item.sefaria} value={item.sefaria}>{item.ru}</option>)}</select></label><label><select value={pageKey} aria-label="Страница" onChange={(e)=>choosePage(e.target.value)}>{pageOptions.map((value)=><option key={value} value={value}>{value.replace("a","а").replace("b","б")}</option>)}</select></label><button disabled={isLast} onClick={()=>move(1)} aria-label="Следующая страница">→</button><div className="zoomControls"><button onClick={()=>setZoom(v=>Math.max(.6,v-.15))} aria-label="Уменьшить">−</button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(v=>Math.min(1.8,v+.15))} aria-label="Увеличить">+</button></div><a className="originalPdfPrint" href={pdfUrl} target="_blank" rel="noopener noreferrer" aria-label="Открыть PDF оригинала страницы для печати" title="Печать оригинала страницы (PDF)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H3v-8h18v8h-3M6 14h12v7H6z"/><path d="M17 11h1"/></svg><span>PDF</span></a></nav>
-      <div className="dafViewport" ref={viewportRef}>{reader&&isMobile?<div className="readerNote">Лист открыт в режиме чтения</div>:sheetViewer(isMobile?fitZoom:zoom)}<button className="readerButton" onClick={()=>setReader(true)} aria-label="Читать лист на весь экран">⛶ Читать</button></div>
-      {reader&&isMobile&&<div className="readerOverlay" role="dialog" aria-label="Чтение листа"><div className="readerBar"><button className="readerClose" onClick={()=>setReader(false)} aria-label="Закрыть">✕</button><b>{label}</b><div className="readerZoom"><button onClick={()=>setReaderZoom(v=>Math.max(.7,v-.2))} aria-label="Уменьшить">−</button><span>{Math.round(readerZoom*100)}%</span><button onClick={()=>setReaderZoom(v=>Math.min(2.6,v+.2))} aria-label="Увеличить">+</button></div></div><div className="readerScroll">{sheetViewer(readerZoom)}</div></div>}
+      <div className="dafViewport">{isMobile?<PanZoom key={pdfUrl}>{(focus)=>sheetViewer(1.6,focus)}</PanZoom>:sheetViewer(zoom)}</div>
+      <p className="sheetHint">В рамке лист двигается пальцем и увеличивается щипком, остальная страница прокручивается вне рамки.</p>
       <div className="pageGuide compactGuide"><span>Лист: Shas.org / HebrewBooks · текст и связи: Sefaria</span></div>
     </aside><article className="studyPane" onMouseUp={captureSelection}>
       <div className="studyNavigation"><div><span>{tractate.ru}</span><b>{daf}{side==="a"?"а":"б"}</b>{canEditArticles&&<BatchEditor key={`batch-${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} page={pageKey} label={label} autoOpen={prepareTarget===`${tractate.sefaria}|${pageKey}`} ready={status==="ready"&&segments.length>0} onSaved={()=>setArticleRetry(value=>value+1)}/>}<PrintPage key={`${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} label={label} segments={segments} context={[...(boundaries.previous?.segments||[]),...segments,...(boundaries.next?.segments||[])]} comments={[...(boundaries.previous?.comments||[]),...comments,...(boundaries.next?.comments||[])]} ready={status==="ready"} /></div><nav aria-label="Соседние страницы">{nearbyPages.map((value)=><button key={value} className={value===pageKey?"active":""} disabled={value===pageKey} onClick={()=>choosePage(value)}>{value.replace("a","а").replace("b","б")}</button>)}</nav></div>

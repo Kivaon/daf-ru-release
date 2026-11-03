@@ -189,7 +189,7 @@ function addOpeningWords(blocks:Record<string,LocatedBlock>, candidates:WordRect
   return result;
 }
 
-export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [], neighborComments = [], onOpenPage, dataReady = true }: {
+export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [], neighborComments = [], onOpenPage, dataReady = true, onFocus }: {
   zoom: number; selectedBlock: string; onSelect: (blockId: string, word: string) => void; onBlockLocated: (blockId?: string) => void;
   landingEdge?: "start"|"end";
   pdfUrl?: string; label?: string; segments?: DafSegment[]; commentary?: CommentaryLink[];
@@ -197,6 +197,8 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   // false while the text and the comments of the sheet are still being fetched: the sheet is then not drawn yet,
   // so that it appears once, already marked
   dataReady?: boolean;
+  // inside a frame that moves the sheet itself the view is not scrolled: the frame is told where the active reply is
+  onFocus?: (box: TextRect) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -214,7 +216,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [hoveredComment, setHoveredComment] = useState<string | null>(null);
   const [pageTip, setPageTip] = useState<{ x: number; y: number; text: string } | null>(null);
   // a comment printed on this sheet but belonging to another one: asked about before the sheet is left
-  const [jump, setJump] = useState<{ x: number; y: number; comment: CommentaryLink } | null>(null);
+  const [jump, setJump] = useState<{ x: number; y: number; scale: number; comment: CommentaryLink } | null>(null);
 
   useEffect(() => {
     if (!dataReady) { setStatus("loading"); return; }
@@ -367,15 +369,23 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   }, [jump]);
   const zoneAt = (event: { clientX: number; clientY: number; currentTarget: HTMLElement }) => {
     const box = event.currentTarget.getBoundingClientRect();
-    const x = event.clientX - box.left, y = event.clientY - box.top;
-    return { x, y, zone: commentaryZones.find((rect) => x >= rect.left - 1 && x <= rect.left + rect.width + 1 && y >= rect.top - 1 && y <= rect.top + rect.height + 1) };
+    // inside a frame that enlarges the sheet the screen and the sheet are not the same size
+    const scale = box.width / (event.currentTarget.offsetWidth || box.width) || 1;
+    const x = (event.clientX - box.left) / scale, y = (event.clientY - box.top) / scale;
+    return { x, y, scale, zone: commentaryZones.find((rect) => x >= rect.left - 1 && x <= rect.left + rect.width + 1 && y >= rect.top - 1 && y <= rect.top + rect.height + 1) };
   };
   // A sheet that has just been opened is shown with the active reply in the middle of the view,
-  // not at the place where the previous sheet was left.
+  // not at the place where the previous sheet was left (in a frame that moves the sheet, the frame is told).
   useEffect(() => {
     if (status !== "ready" || readyUrl !== pdfUrl || centeredFor.current === pdfUrl || !stageRef.current) return;
     const lines = blocks[selectedBlock]?.lines ?? [];
     centeredFor.current = pdfUrl;
+    if (onFocus) {
+      if (!lines.length) return;
+      const left = Math.min(...lines.map((line) => line.left)), top = Math.min(...lines.map((line) => line.top));
+      onFocus({ left, top, width: Math.max(...lines.map((line) => line.left + line.width)) - left, height: Math.max(...lines.map((line) => line.top + line.height)) - top });
+      return;
+    }
     const stage = stageRef.current, view = stage.parentElement;
     if (!view) return;
     requestAnimationFrame(() => {
@@ -383,7 +393,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
       const offsetTop = stageBox.top - viewBox.top + view.scrollTop, offsetLeft = stageBox.left - viewBox.left + view.scrollLeft;
       view.scrollTo(centerScroll({ left: offsetLeft, top: offsetTop, width: stage.offsetWidth }, lines, Object.values(blocks).flatMap((block) => block.lines), { width: view.clientWidth, height: view.clientHeight }));
     });
-  }, [status, readyUrl, blocks, selectedBlock, pdfUrl]);
+  }, [status, readyUrl, blocks, selectedBlock, pdfUrl, onFocus]);
   const tractateLabel=label.replace(/\s+\d+[аб]$/,"");
   return <div ref={stageRef} className="pdfStage" style={{ width: size.width, height: size.height }}>
     <canvas ref={canvasRef} aria-label={`Оригинальный PDF, ${label}`} />
@@ -395,6 +405,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
       {previews.flatMap((block, blockIndex) => block.lines.map((rect, index) => <span key={`preview-${blockIndex}-${index}`} className="textHighlight hoverHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
       {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || previewedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}${linkedRefs.has(comment.ref) ? "" : " previewDibur"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
       <div className="commentaryPad" onPointerMove={(event) => {
+        if (event.pointerType === "touch") return;
         const { zone, x, y } = zoneAt(event);
         setHoveredComment(zone?.ref ?? null);
         const comment = zone ? allComments.find((item) => item.ref === zone.ref) : undefined;
@@ -405,7 +416,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         const ref = zoneAt(event).zone?.ref;
         if (!ref) return;
         setJump(null);
-        if (neighborRefs.has(ref)) { const comment = allComments.find((item) => item.ref === ref); const at = zoneAt(event); if (comment) setJump({ x: at.x, y: at.y, comment }); return; }
+        if (neighborRefs.has(ref)) { const comment = allComments.find((item) => item.ref === ref); const at = zoneAt(event); if (comment) setJump({ x: at.x, y: at.y, scale: at.scale, comment }); return; }
         const bases = commentBases[ref] ?? [];
         const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]);
         if (target) onSelect(target, "");
