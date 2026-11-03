@@ -1,4 +1,4 @@
-export type CommentLike = { ref: string; dibur: string };
+export type CommentLike = { ref: string; dibur: string; text?: string };
 
 export const glyphs: Record<string, string> = {
   "‡":"א", "·":"ב", "‚":"ג", "„":"ד", "‰":"ה", "Â":"ו", "Ê":"ז", "Á":"ח", "Ë":"ט", "È":"י",
@@ -105,6 +105,12 @@ const sameLoosely = (source: string, printed: string) => sameEditionWord(source,
 
 export type FoundDibur<T> = { words: T[]; opening: string[]; whole: boolean; share: number; size: number };
 
+type Candidate = { first: number; last: number; score: number; matched: number; skipped: number };
+
+// Position of a comment in Sefaria's order ("… 46a:2:3" is the third comment on
+// the second reply), and the sheet it belongs to.
+const orderKey = (ref: string) => { const found = ref.match(/(\d+[ab]):(\d+):(\d+)$/); return found ? { page: found[1], rank: Number(found[2]) * 1000 + Number(found[3]) } : undefined; };
+
 export function findDiburim<T extends { word: string; font?: string }>(pdfWords: T[], comments: CommentLike[]) {
   if (!comments.length || !pdfWords.length) return {} as Record<string, FoundDibur<T>>;
   const blocks: Record<string, FoundDibur<T>> = {};
@@ -112,45 +118,107 @@ export function findDiburim<T extends { word: string; font?: string }>(pdfWords:
   const fontCounts = new Map<string | undefined, number>();
   pdfWords.forEach((word) => fontCounts.set(word.font, (fontCounts.get(word.font) ?? 0) + 1));
   const bodyFont = [...fontCounts].sort((a, b) => b[1] - a[1])[0]?.[0];
-  // Last token index of the printed word that spells `sourceWord`, starting at `from`.
+  // The printed word that spells `sourceWord` from token `from` on: where it ends
+  // and how good the match is (1 for the same letters, less for a near spelling).
   const spell = (sourceWord: string, from: number) => {
     let joined = "";
     for (let end = from; end < Math.min(target.length, from + 3); end++) {
       joined += target[end];
       if (joined.length > sourceWord.length + 2) break;
-      if (sameLoosely(sourceWord, joined)) return end;
+      if (joined === sourceWord) return { end, score: 1 };
+      if (sameLoosely(sourceWord, joined)) return { end, score: .7 };
     }
-    return -1;
+    return undefined;
   };
-  comments.forEach((comment) => {
-    const words = editionWords(comment.dibur).filter((word) => !["גמ", "מתני"].includes(word));
-    if (!words.length) return;
-    let best: { first: number; last: number; count: number; skipped: number } | undefined;
-    // The printed dibur may begin a word or two later than Sefaria's, which quotes
-    // the Gemara from its start, so a search may also begin at the second or third word.
+  const wordsOf = (comment: CommentLike) => editionWords(comment.dibur).filter((word) => !["גמ", "מתני"].includes(word));
+  // Every place where a dibur can be read, best first. A word that is not found
+  // costs its share of the score but does not end the search: the next word is
+  // looked for from the same place.
+  const candidatesOf = (comment: CommentLike) => {
+    const words = wordsOf(comment);
+    const found = new Map<number, Candidate>();
     for (const skipped of words.length >= 5 ? [0, 1, 2] : words.length >= 3 ? [0, 1] : [0]) {
       const source = words.slice(skipped);
       for (let start = 0; start < target.length; start++) {
-        let last = spell(source[0], start);
-        if (last < 0) continue;
-        let count = 1;
+        const opening = spell(source[0], start);
+        if (!opening) continue;
+        let last = opening.end, score = opening.score, matched = 1, missed = 0;
         for (let sourceIndex = 1; sourceIndex < source.length; sourceIndex++) {
-          let found = -1;
-          for (let candidate = last + 1; candidate < Math.min(target.length, last + 5) && found < 0; candidate++) found = spell(source[sourceIndex], candidate);
-          if (found < 0) break;
-          last = found; count++;
+          let hit: ReturnType<typeof spell>;
+          for (let candidate = last + 1; candidate < Math.min(target.length, last + 5) && !hit; candidate++) hit = spell(source[sourceIndex], candidate);
+          if (!hit) { if (++missed > Math.floor(source.length * .4)) break; continue; }
+          last = hit.end; score += hit.score; matched++;
         }
-        if (count / words.length < .58 || (skipped && count < 2)) continue;
-        if (!best || count > best.count || (count === best.count && last - start < best.last - best.first)) best = { first: start, last, count, skipped };
+        if (score / words.length < .58 || (skipped && matched < 2)) continue;
+        const better = !found.get(start) || score > found.get(start)!.score;
+        if (better) found.set(start, { first: start, last, score, matched, skipped });
       }
     }
-    if (best) {
-      // The printed dibur is set in its own (bold) font and ends where that font
-      // ends, which may be later than where Sefaria's quotation ends.
-      const font = pdfWords[best.last].font;
-      if (font && font !== bodyFont) while (best.last + 1 < pdfWords.length && best.last - best.first < 24 && pdfWords[best.last + 1].font === font) best.last++;
+    return [...found.values()].sort((a, b) => b.score - a.score || (a.last - a.first) - (b.last - b.first));
+  };
+  // The comment's own text follows its dibur in print. How many of its first
+  // words stand right after a candidate place says whether this is the place.
+  const printedEnd = (candidate: Candidate) => {
+    let last = candidate.last;
+    const font = pdfWords[last].font;
+    if (font && font !== bodyFont) while (last + 1 < pdfWords.length && last - candidate.first < 24 && pdfWords[last + 1].font === font) last++;
+    return last;
+  };
+  const contextOf = (comment: CommentLike, candidate: Candidate) => {
+    if (!comment.text) return 0;
+    const body = editionWords(comment.text).slice(editionWords(comment.dibur).length, editionWords(comment.dibur).length + 8);
+    if (body.length < 3) return 0;
+    let cursor = printedEnd(candidate) + 1, hits = 0;
+    for (const word of body) {
+      let hit: ReturnType<typeof spell>;
+      for (let at = cursor; at < Math.min(target.length, cursor + 4) && !hit; at++) hit = spell(word, at);
+      if (hit) { hits++; cursor = hit.end + 1; }
     }
-    if (best) blocks[comment.ref] = { words: pdfWords.slice(best.first, best.last + 1), opening: words.slice(0, best.skipped).reverse(), whole: best.count === words.length, share: best.count / words.length, size: words.length };
+    return hits / body.length;
+  };
+  const options = comments.map((comment) => {
+    const words = wordsOf(comment);
+    const candidates = words.length ? candidatesOf(comment) : [];
+    const rated = candidates.map((candidate) => ({ candidate, total: candidate.score / words.length + contextOf(comment, candidate) }));
+    rated.sort((a, b) => b.total - a.total || (a.candidate.last - a.candidate.first) - (b.candidate.last - b.candidate.first));
+    return { comment, words, candidates: rated.map((entry) => entry.candidate), totals: rated.map((entry) => entry.total) };
+  });
+  const chosen = new Map<CommentLike, Candidate | undefined>(options.map((entry) => [entry.comment, entry.candidates[0]]));
+  // Comments follow each other on the sheet in Sefaria's order. A dibur whose
+  // place breaks that order is probably read in the wrong spot (it was chosen
+  // among several), so it moves to an equally good place (by score and by the
+  // text that follows it) between its neighbours, if there is one; it is never
+  // dropped for this.
+  const keys = options.map((entry) => orderKey(entry.comment.ref));
+  if (keys.every((key) => key && key.page === keys[0]!.page) && options.length >= 4) {
+    const sequence = options.map((entry, index) => ({ entry, rank: keys[index]!.rank })).sort((a, b) => a.rank - b.rank).filter(({ entry }) => chosen.get(entry.comment));
+    const positions = sequence.map(({ entry }) => chosen.get(entry.comment)!.first);
+    // longest increasing run of positions = the comments that agree with each other
+    const length = positions.map(() => 1), from = positions.map(() => -1);
+    positions.forEach((position, i) => { for (let j = 0; j < i; j++) if (positions[j] < position && length[j] + 1 > length[i]) { length[i] = length[j] + 1; from[i] = j; } });
+    let tail = length.indexOf(Math.max(...length, 0));
+    const agreeing = new Set<number>();
+    while (tail >= 0) { agreeing.add(tail); tail = from[tail]; }
+    sequence.forEach(({ entry }, index) => {
+      if (agreeing.has(index)) return;
+      let before = -1, after = Infinity;
+      for (let i = index - 1; i >= 0; i--) if (agreeing.has(i)) { before = positions[i]; break; }
+      for (let i = index + 1; i < sequence.length; i++) if (agreeing.has(i)) { after = positions[i]; break; }
+      const current = chosen.get(entry.comment)!;
+      const currentTotal = entry.totals[entry.candidates.indexOf(current)];
+      const fitting = entry.candidates.find((candidate, rank) => candidate.first > before && candidate.last < after && entry.totals[rank] >= currentTotal - .1);
+      if (fitting) chosen.set(entry.comment, fitting);
+    });
+  }
+  options.forEach(({ comment, words }) => {
+    const best = chosen.get(comment);
+    if (!best) return;
+    let last = best.last;
+    // The printed dibur is set in its own (bold) font and ends where that font
+    // ends, which may be later than where Sefaria's quotation ends.
+    const font = pdfWords[last].font;
+    if (font && font !== bodyFont) while (last + 1 < pdfWords.length && last - best.first < 24 && pdfWords[last + 1].font === font) last++;
+    blocks[comment.ref] = { words: pdfWords.slice(best.first, last + 1), opening: words.slice(0, best.skipped).reverse(), whole: best.skipped === 0 && best.matched === words.length, share: best.score / words.length, size: words.length };
   });
   return blocks;
 }

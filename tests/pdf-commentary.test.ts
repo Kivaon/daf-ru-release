@@ -62,3 +62,14 @@ test('a dibur spelled with and without yod is still found',()=>{
  const found=findDiburim(printed('בהמה','לית','לה','פרוזדור'),[{ref:'r',dibur:'בהמה לית ליה פרוזדור'}]);
  assert.equal(found.r.words.length,4);
 });
+
+test('a word that differs does not stop the search for the words after it',()=>{
+ const found=findDiburim(printed('בהמה','לית','אחר','פרוזדור'),[{ref:'r',dibur:'בהמה לית ליה פרוזדור'}]);
+ assert.deepEqual(found.r.words.map(w=>w.word),['בהמה','לית','אחר','פרוזדור']);
+});
+
+test('of two places for a short dibur, the one followed by the comment\'s own text is taken',()=>{
+ const stream=printed('שנאמר','אחר','דבר','זה','שנאמר','הקדשתי','לי','כל','בכור');
+ const found=findDiburim(stream,[{ref:'r',dibur:'שנאמר',text:'שנאמר - הקדשתי לי כל בכור'}]);
+ assert.equal(found.r.words[0],stream[4]);
+});
