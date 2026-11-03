@@ -88,12 +88,15 @@ export function columnOrder<T extends { left: number; width: number; top: number
 const withoutNun = (word: string) => word.replace(/[נן]/g, "");
 const sameLoosely = (source: string, printed: string) => sameEditionWord(source, printed) || (printed.length > 0 && withoutNun(source).length >= 2 && sameEditionWord(withoutNun(source), withoutNun(printed)));
 
-export type FoundDibur<T> = { words: T[]; opening: string[]; whole: boolean };
+export type FoundDibur<T> = { words: T[]; opening: string[]; whole: boolean; share: number; size: number };
 
-export function findDiburim<T extends { word: string }>(pdfWords: T[], comments: CommentLike[]) {
+export function findDiburim<T extends { word: string; font?: string }>(pdfWords: T[], comments: CommentLike[]) {
   if (!comments.length || !pdfWords.length) return {} as Record<string, FoundDibur<T>>;
   const blocks: Record<string, FoundDibur<T>> = {};
   const target = pdfWords.map((word) => normalizeHebrew(word.word));
+  const fontCounts = new Map<string | undefined, number>();
+  pdfWords.forEach((word) => fontCounts.set(word.font, (fontCounts.get(word.font) ?? 0) + 1));
+  const bodyFont = [...fontCounts].sort((a, b) => b[1] - a[1])[0]?.[0];
   // Last token index of the printed word that spells `sourceWord`, starting at `from`.
   const spell = (sourceWord: string, from: number) => {
     let joined = "";
@@ -126,7 +129,13 @@ export function findDiburim<T extends { word: string }>(pdfWords: T[], comments:
         if (!best || count > best.count || (count === best.count && last - start < best.last - best.first)) best = { first: start, last, count, skipped };
       }
     }
-    if (best) blocks[comment.ref] = { words: pdfWords.slice(best.first, best.last + 1), opening: words.slice(0, best.skipped).reverse(), whole: best.count === words.length };
+    if (best) {
+      // The printed dibur is set in its own (bold) font and ends where that font
+      // ends, which may be later than where Sefaria's quotation ends.
+      const font = pdfWords[best.last].font;
+      if (font && font !== bodyFont) while (best.last + 1 < pdfWords.length && best.last - best.first < 24 && pdfWords[best.last + 1].font === font) best.last++;
+    }
+    if (best) blocks[comment.ref] = { words: pdfWords.slice(best.first, best.last + 1), opening: words.slice(0, best.skipped).reverse(), whole: best.count === words.length, share: best.count / words.length, size: words.length };
   });
   return blocks;
 }
@@ -159,7 +168,7 @@ export function addOpeningWords<T extends Placed>(found: Record<string, FoundDib
 // match unambiguously, then the search is repeated within that side only and
 // takes precedence, so a dibur that Rashi and Tosafot both begin with is not
 // taken from the wrong one.
-export function findCommentary<T extends { word: string; left: number; width: number }>(pdfWords: T[], comments: Array<CommentLike & { commentator: string }>, pageCenter: number) {
+export function findCommentary<T extends { word: string; font?: string; left: number; width: number }>(pdfWords: T[], comments: Array<CommentLike & { commentator: string }>, pageCenter: number) {
   const sideOf = (word: T) => (word.left + word.width / 2 < pageCenter ? "left" : "right");
   const result: Record<string, FoundDibur<T>> = {};
   for (const commentator of new Set(comments.map((comment) => comment.commentator))) {
@@ -174,4 +183,15 @@ export function findCommentary<T extends { word: string; left: number; width: nu
     Object.assign(result, first, side ? findDiburim(pdfWords.filter((word) => sideOf(word) === side), own) : {});
   }
   return result;
+}
+
+// Comments of the neighbouring sheets can be printed on this one (the end of a
+// commentary spills over). They are searched only among words that no comment of
+// this sheet has taken, and only accepted when nearly the whole dibur is found,
+// since a short dibur would otherwise match any chance repetition; the printed
+// words must also be hardly more than the dibur's own.
+export function findOverflow<T extends { word: string; font?: string; left: number; width: number }>(pdfWords: T[], taken: Record<string, FoundDibur<T>>, comments: Array<CommentLike & { commentator: string }>, pageCenter: number) {
+  const used = new Set<T>(Object.values(taken).flatMap((dibur) => dibur.words));
+  const found = findCommentary(pdfWords.filter((word) => !used.has(word)), comments.filter((comment) => !taken[comment.ref]), pageCenter);
+  return Object.fromEntries(Object.entries(found).filter(([, dibur]) => dibur.share >= .8 && dibur.size >= 3 && dibur.words.length <= dibur.size + 1));
 }

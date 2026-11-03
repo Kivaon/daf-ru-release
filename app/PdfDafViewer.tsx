@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CommentaryLink } from "./bekhorot2aCommentary";
 import { tokenLeft } from "./pdfWordOrder";
-import { addOpeningWords as addDiburOpening, columnOrder, decodeWord, editionWords, findCommentary, normalizeHebrew, sameEditionWord } from "./pdfCommentary";
+import { addOpeningWords as addDiburOpening, columnOrder, decodeWord, editionWords, findCommentary, findOverflow, normalizeHebrew, sameEditionWord } from "./pdfCommentary";
 
 export type DafSegment = { id: string; kind: string; text: string };
 
 type TextRect = { left: number; top: number; width: number; height: number };
-type WordRect = TextRect & { word: string; line: number };
+type WordRect = TextRect & { word: string; line: number; font: string };
 type LocatedBlock = { lines: TextRect[]; words: WordRect[] };
 type PdfJsApi = { GlobalWorkerOptions: { workerSrc: string }; getDocument: (source: { data: Uint8Array }) => { promise: Promise<unknown> } };
 
@@ -184,10 +184,11 @@ function addOpeningWords(blocks:Record<string,LocatedBlock>, candidates:WordRect
   return result;
 }
 
-export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [] }: {
+export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [], neighborComments = [], onOpenPage }: {
   zoom: number; selectedBlock: string; onSelect: (blockId: string, word: string) => void; onBlockLocated: (blockId?: string) => void;
   landingEdge?: "start"|"end";
   pdfUrl?: string; label?: string; segments?: DafSegment[]; commentary?: CommentaryLink[];
+  neighborComments?: CommentaryLink[]; onOpenPage?: (pageKey: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -199,6 +200,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [commentaryBlocks, setCommentaryBlocks] = useState<Record<string, LocatedBlock>>({});
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
   const [hoveredComment, setHoveredComment] = useState<string | null>(null);
+  const [pageTip, setPageTip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -236,7 +238,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
             return Array.from(item.str.matchAll(/\S+/g)).map((match) => ({
               left: tokenLeft(left, width, item.str.length, match.index ?? 0, match[0].length, /[א-ת]/.test(item.str)), top,
               width: Math.max(2, width * (match[0].length / item.str.length)), height,
-              word: decodeWord(match[0]), line: Math.round(item.transform[5] / 5),
+              word: decodeWord(match[0]), line: Math.round(item.transform[5] / 5), font: item.fontName,
             }));
           })
           .filter((word) => normalizeHebrew(word.word))
@@ -273,15 +275,17 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         // Rashi and Tosafot share one print size, between the Gemara (largest) and
         // the footnotes. Searching the whole page lets a dibur match the identical
         // words of the Gemara itself, so only that size band is searched.
-        const commentaryWords = columnOrder(makeWords((item) => isOnPage(item) && item.height >= 9.5 && item.height < gemaraHeight - 1.5), 3.5 * zoom, 7 * zoom);
+        // Diburim are also set in a larger bold face (taller than the Gemara, in a
+        // font of its own); those words belong to the commentary stream too.
+        const commentaryWords = columnOrder(makeWords((item) => isOnPage(item) && ((item.height >= 9.5 && item.height < gemaraHeight - 1.5) || (item.height > gemaraHeight + .4 && item.height < gemaraHeight + 4.5 && item.fontName !== gemaraFont))), 3.5 * zoom, 7 * zoom);
         let locatedBlocks: Record<string, LocatedBlock> = {}, locatedCommentary: Record<string, LocatedBlock> = {}, mappingError = "", mappingNotice = "";
         try {
           const alignment = segments.length?alignSefariaToPdf(pdfWords, segments):{blocks:{},warnings:[]};
           locatedBlocks = addOpeningWords(alignment.blocks, openingCandidates, segments, zoom);
           mappingNotice = alignment.warnings.join(" · ");
-          locatedCommentary = {
-            ...asBlocks(addDiburOpening(findCommentary(commentaryWords, commentary, viewport.width / 2), makeWords((item) => isOnPage(item)), zoom)),
-          };
+          const ownFound = findCommentary(commentaryWords, commentary, viewport.width / 2);
+          const overflow = neighborComments.length ? findOverflow(commentaryWords, ownFound, neighborComments, viewport.width / 2) : {};
+          locatedCommentary = asBlocks(addDiburOpening({ ...ownFound, ...overflow }, makeWords((item) => isOnPage(item)), zoom));
         } catch (reason) {
           mappingError = reason instanceof Error ? reason.message : String(reason);
         }
@@ -305,12 +309,14 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     }
     renderPdf();
     return () => { cancelled = true; renderTaskRef.current?.cancel(); };
-  }, [zoom, onBlockLocated, pdfUrl, segments, commentary, landingEdge]);
+  }, [zoom, onBlockLocated, pdfUrl, segments, commentary, neighborComments, landingEdge]);
 
   const selected = blocks[selectedBlock];
   const linkedComments = commentary.filter((comment) => comment.base === selectedBlock);
-  const commentBases = commentary.reduce<Record<string, string[]>>((result, comment) => { (result[comment.ref] ??= []).push(comment.base); return result; }, {});
-  const uniqueComments = commentary.filter((comment, index, all) => all.findIndex((other) => other.ref === comment.ref) === index);
+  const allComments = [...commentary, ...neighborComments];
+  const neighborRefs = new Set(neighborComments.map((comment) => comment.ref));
+  const commentBases = allComments.reduce<Record<string, string[]>>((result, comment) => { (result[comment.ref] ??= []).push(comment.base); return result; }, {});
+  const uniqueComments = allComments.filter((comment, index, all) => all.findIndex((other) => other.ref === comment.ref) === index);
   const linkedRefs = new Set(linkedComments.map((comment) => comment.ref));
   const hoveredBases = hoveredComment ? commentBases[hoveredComment] ?? [] : [];
   const previews = [
@@ -327,7 +333,15 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
       {selected?.lines.map((rect, index) => <span key={`selected-${index}`} className="textHighlight selectedHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />)}
       {previews.flatMap((block, blockIndex) => block.lines.map((rect, index) => <span key={`preview-${blockIndex}-${index}`} className="textHighlight hoverHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
       {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
-      {uniqueComments.flatMap((comment) => (commentaryBlocks[comment.ref]?.words ?? []).map((rect, index) => <button key={`comment-hit-${comment.ref}-${index}`} className="commentaryHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredComment(comment.ref)} onPointerLeave={() => setHoveredComment(null)} onFocus={() => setHoveredComment(comment.ref)} onBlur={() => setHoveredComment(null)} onClick={() => { const bases = commentBases[comment.ref] ?? []; const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]); if (target) onSelect(target, ""); }} aria-label={`${comment.commentator === "Rashi" ? "Раши" : "Тосафот"}: ${comment.dibur}; показать реплику`} />))}
+      {uniqueComments.flatMap((comment) => (commentaryBlocks[comment.ref]?.words ?? []).map((rect, index) => {
+        const elsewhere = neighborRefs.has(comment.ref);
+        const pageKey = comment.base.split(":")[0];
+        const tipText = `${comment.commentator === "Rashi" ? "Раши" : "Тосафот"} · см. ${pageKey.replace(/a$/, "а").replace(/b$/, "б")}`;
+        const showTip = (event: ReactPointerEvent<HTMLButtonElement>) => { if (!elsewhere) return; const box = event.currentTarget.parentElement!.getBoundingClientRect(); setPageTip({ x: event.clientX - box.left + 12, y: event.clientY - box.top + 16, text: tipText }); };
+        const leave = () => { setHoveredComment(null); setPageTip(null); };
+        return <button key={`comment-hit-${comment.ref}-${index}`} className="commentaryHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={(event) => { setHoveredComment(comment.ref); showTip(event); }} onPointerMove={showTip} onPointerLeave={leave} onFocus={() => setHoveredComment(comment.ref)} onBlur={leave} onClick={() => { if (elsewhere) { onOpenPage?.(pageKey); return; } const bases = commentBases[comment.ref] ?? []; const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]); if (target) onSelect(target, ""); }} aria-label={elsewhere ? `${tipText}: ${comment.dibur}` : `${comment.commentator === "Rashi" ? "Раши" : "Тосафот"}: ${comment.dibur}; показать реплику`} />;
+      }))}
+      {pageTip && <div className="pageTip" style={{ left: pageTip.x, top: pageTip.y }}>{pageTip.text}</div>}
       {Object.entries(blocks).flatMap(([blockId, block]) => block.words.map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
     </div>}
   </div>;
