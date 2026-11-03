@@ -231,24 +231,6 @@ function addOpeningWords(blocks:Record<string,LocatedBlock>, candidates:WordRect
   return result;
 }
 
-function locateDiburInGemara(words: WordRect[], dibur: string) {
-  const source = editionWords(dibur).filter((word) => !["גמ", "מתני"].includes(word));
-  const target = words.map((word) => normalizeHebrew(word.word));
-  let cursor = 0;
-  const matchedIndexes: number[] = [];
-  source.forEach((sourceWord) => {
-    for (let index = cursor; index < target.length; index++) {
-      if (target[index] === sourceWord || target[index].endsWith(sourceWord) || sourceWord.endsWith(target[index])) {
-        matchedIndexes.push(index); cursor = index + 1; break;
-      }
-    }
-  });
-  if (!matchedIndexes.length || matchedIndexes.length / source.length < .5) return null;
-  const locatedWords = words.slice(matchedIndexes[0], matchedIndexes.at(-1)! + 1);
-  const lines = lineRects(locatedWords);
-  return { words: locatedWords, lines };
-}
-
 export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [] }: {
   zoom: number; selectedBlock: string; onSelect: (blockId: string, word: string) => void; onBlockLocated: (blockId?: string) => void;
   landingEdge?: "start"|"end";
@@ -264,7 +246,6 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [commentaryBlocks, setCommentaryBlocks] = useState<Record<string, LocatedBlock>>({});
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
   const [hoveredComment, setHoveredComment] = useState<string | null>(null);
-  const [pinnedComment, setPinnedComment] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -374,23 +355,26 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   }, [zoom, onBlockLocated, pdfUrl, segments, commentary, landingEdge]);
 
   const selected = blocks[selectedBlock];
-  const preview = hoveredBlock && hoveredBlock !== selectedBlock ? blocks[hoveredBlock] : null;
   const linkedComments = commentary.filter((comment) => comment.base === selectedBlock);
-  const activeComment = hoveredComment ?? pinnedComment;
-  const activeCommentary = linkedComments.find((comment) => comment.ref === activeComment);
-  const gemaraCue = activeCommentary && selected ? locateDiburInGemara(selected.words, activeCommentary.dibur) : null;
+  const commentBases = commentary.reduce<Record<string, string[]>>((result, comment) => { (result[comment.ref] ??= []).push(comment.base); return result; }, {});
+  const uniqueComments = commentary.filter((comment, index, all) => all.findIndex((other) => other.ref === comment.ref) === index);
+  const linkedRefs = new Set(linkedComments.map((comment) => comment.ref));
+  const hoveredBases = hoveredComment ? commentBases[hoveredComment] ?? [] : [];
+  const previews = [
+    ...(hoveredBlock && hoveredBlock !== selectedBlock ? [blocks[hoveredBlock]] : []),
+    ...hoveredBases.filter((base) => base !== selectedBlock).map((base) => blocks[base]),
+  ].filter(Boolean);
   const tractateLabel=label.replace(/\s+\d+[аб]$/,"");
   return <div className="pdfStage" style={{ width: size.width, height: size.height }}>
     <canvas ref={canvasRef} aria-label={`Оригинальный PDF, ${label}`} />
     {status === "loading" && <div className="pdfStatus">Загружаем оригинальный PDF…</div>}
     {status === "error" && <div className="pdfStatus error">Не удалось открыть PDF.<small>{errorMessage}</small><a href={pdfUrl}>Открыть оригинал</a></div>}
     {status === "ready" && alignmentWarning && <div className="alignmentWarning">{tractateLabel} · {Object.keys(blocks).length ? "Лист размечен частично: " : "Лист открыт, интерактивная разметка отключена: "}{alignmentWarning}</div>}
-    {status === "ready" && <div className="pdfInteraction" aria-label="Интерактивный слой оригинального листа" data-active-comment={activeComment ?? ""} data-gemara-cue={gemaraCue ? "yes" : "no"}>
+    {status === "ready" && <div className="pdfInteraction" aria-label="Интерактивный слой оригинального листа" data-active-comment={hoveredComment ?? ""}>
       {selected?.lines.map((rect, index) => <span key={`selected-${index}`} className="textHighlight selectedHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />)}
-      {preview?.lines.map((rect, index) => <span key={`preview-${index}`} className="textHighlight hoverHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />)}
-      {linkedComments.flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
-      {gemaraCue?.lines.map((rect, index) => <span key={`gemara-cue-${index}`} className="textHighlight gemaraCueHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />)}
-      {linkedComments.flatMap((comment) => (commentaryBlocks[comment.ref]?.words ?? []).map((rect, index) => <button key={`comment-hit-${comment.ref}-${index}`} className="commentaryHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredComment(comment.ref)} onPointerLeave={() => setHoveredComment(null)} onFocus={() => setHoveredComment(comment.ref)} onBlur={() => setHoveredComment(null)} onClick={() => setPinnedComment((current) => current === comment.ref ? null : comment.ref)} aria-label={`${comment.commentator === "Rashi" ? "Раши" : "Тосафот"}: ${comment.dibur}; показать место в Гемаре`} />))}
+      {previews.flatMap((block, blockIndex) => block.lines.map((rect, index) => <span key={`preview-${blockIndex}-${index}`} className="textHighlight hoverHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
+      {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
+      {uniqueComments.flatMap((comment) => (commentaryBlocks[comment.ref]?.words ?? []).map((rect, index) => <button key={`comment-hit-${comment.ref}-${index}`} className="commentaryHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredComment(comment.ref)} onPointerLeave={() => setHoveredComment(null)} onFocus={() => setHoveredComment(comment.ref)} onBlur={() => setHoveredComment(null)} onClick={() => { const bases = commentBases[comment.ref] ?? []; const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]); if (target) onSelect(target, ""); }} aria-label={`${comment.commentator === "Rashi" ? "Раши" : "Тосафот"}: ${comment.dibur}; показать реплику`} />))}
       {Object.entries(blocks).flatMap(([blockId, block]) => block.words.map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
     </div>}
   </div>;
