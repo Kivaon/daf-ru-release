@@ -101,3 +101,42 @@
 .commentaryHighlight.previewDibur.rashiPdfHighlight{background:rgba(0,190,90,.2)}.commentaryHighlight.previewDibur.tosafotPdfHighlight{background:rgba(10,150,255,.2)}.pdfStatus small{display:block;margin-top:6px;color:#8a938e}.pdfStatus>div{text-align:center;padding:0 24px}
 .jumpNote{position:absolute;z-index:7;width:260px;box-sizing:border-box;padding:12px 14px 12px;background:#fbfaf6;border:1px solid #d7d5cd;border-top:3px solid #2d6a57;border-radius:9px;box-shadow:0 8px 28px rgba(24,43,37,.22);font:12px/1.5 Inter,system-ui,sans-serif;color:#4a5852}.jumpTosafot{border-top-color:#2f93e6}.jumpNote small{display:block;font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:#39705e}.jumpTosafot small{color:#2a78b8}.jumpDibur{display:block;margin:7px 0 5px;font:18px/1.35 Georgia,serif;color:#17342e}.jumpNote p{margin:0 0 10px;color:#64716c}.jumpActions{display:flex;gap:8px}.jumpActions button{border-radius:6px;padding:7px 12px;font:12px Inter,system-ui,sans-serif;cursor:pointer}.jumpGo{background:#173f35;color:#fff;border:1px solid #173f35}.jumpGo:hover{background:#1f5246}.jumpStay{background:transparent;color:#285c4d;border:1px solid #bfcfc8}.jumpStay:hover{background:#f3f7f4}
 .jumpNote{text-align:center}.jumpNote p{margin:8px 0 12px}.jumpActions button{flex:1 1 0;min-width:0;text-align:center}
+
+/* Phone layout. Everything for the burger menu, the "Читать" button and the reading mode is hidden on wider screens. */
+.menuToggle,.menuOnly,.readerButton,.readerNote{display:none}
+.readerOverlay{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;background:#d8d5cd}
+.readerBar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#153d35;color:#fff;font:15px Georgia,serif}
+.readerBar b{font-weight:400;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.readerClose{width:40px;height:40px;border:1px solid #53716b;border-radius:8px;background:transparent;color:#fff;font-size:18px;cursor:pointer}
+.readerZoom{display:flex;align-items:center;border:1px solid #53716b;border-radius:8px;overflow:hidden}
+.readerZoom button{width:40px;height:38px;border:0;background:transparent;color:#fff;font-size:20px;cursor:pointer}
+.readerZoom span{min-width:48px;text-align:center;font:13px Inter,system-ui,sans-serif}
+.readerScroll{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:8px}
+.readerScroll .pdfStage{margin:0}
+@media(max-width:640px){
+ .topbar{flex-wrap:nowrap;height:52px;min-height:52px;padding:0 14px;gap:0;justify-content:space-between;transition:transform .2s ease;z-index:30}
+ .topbar.topbarHidden{transform:translateY(-100%)}
+ .brand{font-size:20px;gap:10px}
+ .brandMark{width:32px;height:32px;font-size:20px}
+ .menuToggle{display:grid;place-items:center;width:42px;height:38px;border:1px solid #53716b;border-radius:8px;background:transparent;color:#fff;font-size:20px;line-height:1;cursor:pointer}
+ .topbar .account{display:none;position:absolute;top:100%;left:8px;right:8px;margin:0;flex-direction:column;align-items:stretch;flex-wrap:nowrap;justify-content:flex-start;gap:2px;padding:8px;background:#153d35;border:1px solid rgba(255,255,255,.18);border-top:0;border-radius:0 0 12px 12px;box-shadow:0 14px 30px rgba(0,0,0,.35)}
+ .topbar .account.open{display:flex}
+ .topbar .account>:not(dialog){box-sizing:border-box;width:100%;min-height:46px;margin:0;padding:12px 10px;display:flex;align-items:center;justify-content:flex-start;gap:8px;border:0;border-radius:8px;background:transparent;color:#eef3f0;font:15px Inter,system-ui,sans-serif;text-align:left;text-decoration:none}
+ .topbar .account>span:first-child:not(.aboutProjectButton){color:#b8c2bd;font-size:13px;min-height:36px;border-bottom:1px solid rgba(255,255,255,.14);border-radius:0}
+ .topbar .account>.iconButton,.topbar .account>.aboutProjectButton,.topbar .account>.accountLink,.topbar .account>.signInButton,.topbar .account>.mapNavLink,.topbar .account>.menuOnly{display:flex}
+ .topbar .account .iconButton span{display:inline}
+ .topbar .account .mapNavLink{text-decoration:none;font-size:15px;color:#eef3f0}
+ .topbar .account>:not(dialog):hover,.topbar .account>:not(dialog):focus-visible{background:rgba(255,255,255,.08)}
+ .workspace{display:block}
+ .dafPane{position:static;top:auto;height:auto;display:block;padding:6px 10px 12px;border-bottom:1px solid #d2d0c5}
+ .compactNavigation{flex-wrap:nowrap;height:auto;gap:6px;padding:4px 0 8px;min-height:0}
+ .compactNavigation>button{flex:0 0 40px;height:38px}
+ .compactNavigation label:first-of-type{flex:1 1 0;min-width:0}
+ .compactNavigation label:nth-of-type(2){flex:0 0 84px}
+ .compactNavigation select{max-width:none;height:38px}
+ .compactNavigation .zoomControls,.compactNavigation .originalPdfPrint{display:none}
+ .dafViewport{position:relative;flex:none;height:auto;overflow:visible;padding:6px}
+ .readerButton{display:flex;align-items:center;gap:6px;position:absolute;top:12px;right:12px;z-index:12;height:36px;padding:0 12px;border:1px solid rgba(21,61,53,.35);border-radius:18px;background:rgba(255,255,255,.94);color:#173f35;font:13px Inter,system-ui,sans-serif;box-shadow:0 2px 8px rgba(31,35,32,.2);cursor:pointer}
+ .readerNote{display:block;padding:24px 8px;text-align:center;color:#64716c;font:13px Inter,system-ui,sans-serif}
+ .compactGuide{display:block}
+}
