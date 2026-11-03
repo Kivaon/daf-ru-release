@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CommentaryLink } from "./bekhorot2aCommentary";
-import { readingOrder, tokenLeft } from "./pdfWordOrder";
+import { tokenLeft } from "./pdfWordOrder";
+import { columnOrder, decodeWord, editionWords, findDiburim, normalizeHebrew, sameEditionWord } from "./pdfCommentary";
 
 export type DafSegment = { id: string; kind: string; text: string };
 
@@ -22,46 +23,6 @@ function loadPdfJs() {
     script.addEventListener("error", () => reject(new Error("Не удалось загрузить PDF.js")), { once: true });
     if (!existing) { script.src = "/pdf.min.js?v=3"; script.dataset.pdfjs = "true"; document.head.appendChild(script); }
   });
-}
-
-const glyphs: Record<string, string> = {
-  "‡":"א", "·":"ב", "‚":"ג", "„":"ד", "‰":"ה", "Â":"ו", "Ê":"ז", "Á":"ח", "Ë":"ט", "È":"י",
-  "Î":"כ", "Í":"ך", "Ï":"ל", "Ó":"מ", "Ì":"ם", "\u0005":"נ", "\b":"נ", "\u0010":"נ", "\u0011":"נ", "\u0012":"נ", "\u0014":"נ", "Ô":"ן", "Ò":"ס", "Ú":"ע", "Ù":"פ",
-  "Û":"ף", "ˆ":"צ", "ı":"ץ", "˜":"ק", "¯":"ר", "˘":"ש", "˙":"ת",
-};
-const decodeWord = (raw: string) => /[א-ת]/.test(raw)?raw:Array.from(raw).map((char) => glyphs[char] ?? (char.charCodeAt(0)>=0xe0&&char.charCodeAt(0)<=0xfa?String.fromCharCode(0x5d0+char.charCodeAt(0)-0xe0):char==='\u0004'?'נ':char)).reverse().join("").replace("'", "׳");
-const normalizeHebrew = (text: string) => text.normalize("NFD").replace(/[\u0591-\u05C7]/g, "").replace(/[^\u05D0-\u05EA]/g, "");
-
-function editionWords(text: string) {
-  return text.split(/\s+/).flatMap((word) => {
-    const normalized = normalizeHebrew(word);
-    if (normalized === "נכרי" || normalized === "גוי") return ["עובד", "כוכבים"];
-    if (normalized === "הגוי") return ["העובד", "כוכבים"];
-    return normalized ? [normalized] : [];
-  });
-}
-
-function wordDistance(first: string, second: string) {
-  const width = second.length + 1;
-  const distances = new Uint16Array((first.length + 1) * width);
-  for (let index = 0; index <= first.length; index++) distances[index * width] = index;
-  for (let index = 0; index <= second.length; index++) distances[index] = index;
-  for (let row = 1; row <= first.length; row++) for (let column = 1; column <= second.length; column++) {
-    distances[row * width + column] = Math.min(
-      distances[(row - 1) * width + column] + 1,
-      distances[row * width + column - 1] + 1,
-      distances[(row - 1) * width + column - 1] + (first[row - 1] === second[column - 1] ? 0 : 1),
-    );
-  }
-  return distances[first.length * width + second.length];
-}
-
-// The Vilna PDF and Sefaria occasionally differ by a mater lectionis or one
-// damaged glyph. Such a spelling difference must not become a semantic border.
-function sameEditionWord(first: string, second: string) {
-  if (first === second) return true;
-  const longest = Math.max(first.length, second.length);
-  return longest >= 4 && wordDistance(first, second) <= (longest >= 8 ? 2 : 1);
 }
 
 function lineRects(words: WordRect[]) {
@@ -163,35 +124,11 @@ function alignSefariaToPdf(pdfWords: WordRect[], segments: DafSegment[]) {
   return { blocks, warnings };
 }
 
-function alignDiburimToPdf(pdfWords: WordRect[], comments: CommentaryLink[]) {
-  if (!comments.length || !pdfWords.length) return {} as Record<string, LocatedBlock>;
-  const blocks: Record<string, LocatedBlock> = {};
-  const target=pdfWords.map((word)=>normalizeHebrew(word.word));
-  comments.forEach((comment) => {
-    const source=editionWords(comment.dibur).filter((word)=>!["גמ","מתני"].includes(word));
-    if(!source.length)return;
-    let best:number[]=[];
-    for(let start=0;start<target.length;start++){
-      if(!sameEditionWord(source[0],target[start]))continue;
-      const matched=[start]; let cursor=start+1;
-      for(let sourceIndex=1;sourceIndex<source.length;sourceIndex++){
-        let found=-1;
-        for(let candidate=cursor;candidate<Math.min(target.length,cursor+4);candidate++)if(sameEditionWord(source[sourceIndex],target[candidate])){found=candidate;break;}
-        if(found<0)break;
-        matched.push(found);cursor=found+1;
-      }
-      if(matched.length>best.length || (matched.length===best.length && matched.at(-1)!-matched[0]<best.at(-1)!-best[0]))best=matched;
-    }
-    if(!best.length || best.length/source.length<.58)return;
-    const words=pdfWords.slice(best[0],best.at(-1)!+1);
-    blocks[comment.ref]={words,lines:lineRects(words)};
-  });
-  return blocks;
-}
-
 // Display words such as מתני׳ / גמ׳ and a Mishnah's oversized opening word can
 // use another font in the Vilna PDF. Add only nearby, text-confirmed candidates
 // after the main continuous alignment has established the semantic block.
+const asBlocks = (found: Record<string, WordRect[]>) => Object.fromEntries(Object.entries(found).map(([ref, words]) => [ref, { words, lines: lineRects(words) }])) as Record<string, LocatedBlock>;
+
 function addOpeningWords(blocks:Record<string,LocatedBlock>, candidates:WordRect[], segments:DafSegment[], zoom:number) {
   const result={...blocks};
   segments.forEach((segment) => {
@@ -318,16 +255,18 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         // such bends, so collect the complete printed Gemara size instead.
         const pdfWords = makeWords((item) => isOnPage(item) && Math.abs(item.height - gemaraHeight) <= .8);
         const openingCandidates = makeWords((item) => item.transform[4] > 55 && item.transform[4] < 550 && isOnPage(item) && item.height >= 10.5);
-        const rashiWords = readingOrder(makeWords((item) => isOnPage(item)), 3.5 * zoom);
-        const tosafotWords = rashiWords;
+        // Rashi and Tosafot share one print size, between the Gemara (largest) and
+        // the footnotes. Searching the whole page lets a dibur match the identical
+        // words of the Gemara itself, so only that size band is searched.
+        const commentaryWords = columnOrder(makeWords((item) => isOnPage(item) && item.height >= 9.5 && item.height < gemaraHeight - 1.5), 3.5 * zoom, 7 * zoom);
         let locatedBlocks: Record<string, LocatedBlock> = {}, locatedCommentary: Record<string, LocatedBlock> = {}, mappingError = "", mappingNotice = "";
         try {
           const alignment = segments.length?alignSefariaToPdf(pdfWords, segments):{blocks:{},warnings:[]};
           locatedBlocks = addOpeningWords(alignment.blocks, openingCandidates, segments, zoom);
           mappingNotice = alignment.warnings.join(" · ");
           locatedCommentary = {
-            ...alignDiburimToPdf(rashiWords, commentary.filter((comment) => comment.commentator === "Rashi")),
-            ...alignDiburimToPdf(tosafotWords, commentary.filter((comment) => comment.commentator === "Tosafot")),
+            ...asBlocks(findDiburim(commentaryWords, commentary.filter((comment) => comment.commentator === "Rashi"))),
+            ...asBlocks(findDiburim(commentaryWords, commentary.filter((comment) => comment.commentator === "Tosafot"))),
           };
         } catch (reason) {
           mappingError = reason instanceof Error ? reason.message : String(reason);

@@ -10,12 +10,3 @@ export function tokenLeft(left:number,width:number,textLength:number,index:numbe
 // Group words into visual rows by baseline (a bold lead-in word sits about a point
 // off its line and must not fall into a neighbouring row), then read each row right
 // to left. `line` becomes the row number so one row is drawn as one highlight.
-export function readingOrder<T extends {left:number;top:number;height:number;line:number}>(words:T[],tolerance:number):T[]{
-  const rows:T[][]=[];let anchor=-Infinity;
-  for(const word of [...words].sort((first,second)=>first.top+first.height-(second.top+second.height))){
-    const baseline=word.top+word.height;
-    if(!rows.length||baseline-anchor>tolerance){rows.push([]);anchor=baseline;}
-    rows.at(-1)!.push(word);
-  }
-  return rows.flatMap((row,index)=>row.sort((first,second)=>second.left-first.left).map(word=>({...word,line:index})));
-}
