@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CommentaryLink } from "./bekhorot2aCommentary";
+import { readingOrder, tokenLeft } from "./pdfWordOrder";
 
 export type DafSegment = { id: string; kind: string; text: string };
 
@@ -300,7 +301,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
             const p2 = toViewport(item.transform[4] + item.width, item.transform[5] + item.height);
             const left = Math.min(p1.x, p2.x), top = Math.min(p1.y, p2.y), width = Math.abs(p2.x - p1.x), height = Math.abs(p2.y - p1.y);
             return Array.from(item.str.matchAll(/\S+/g)).map((match) => ({
-              left: left + width * ((match.index ?? 0) / item.str.length), top,
+              left: tokenLeft(left, width, item.str.length, match.index ?? 0, match[0].length, /[א-ת]/.test(item.str)), top,
               width: Math.max(2, width * (match[0].length / item.str.length)), height,
               word: decodeWord(match[0]), line: Math.round(item.transform[5] / 5),
             }));
@@ -336,8 +337,8 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         // such bends, so collect the complete printed Gemara size instead.
         const pdfWords = makeWords((item) => isOnPage(item) && Math.abs(item.height - gemaraHeight) <= .8);
         const openingCandidates = makeWords((item) => item.transform[4] > 55 && item.transform[4] < 550 && isOnPage(item) && item.height >= 10.5);
-        const rashiWords = makeWords((item) => isOnPage(item));
-        const tosafotWords = makeWords((item) => isOnPage(item));
+        const rashiWords = readingOrder(makeWords((item) => isOnPage(item)), 3.5 * zoom);
+        const tosafotWords = rashiWords;
         let locatedBlocks: Record<string, LocatedBlock> = {}, locatedCommentary: Record<string, LocatedBlock> = {}, mappingError = "", mappingNotice = "";
         try {
           const alignment = segments.length?alignSefariaToPdf(pdfWords, segments):{blocks:{},warnings:[]};
