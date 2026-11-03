@@ -25,7 +25,7 @@ test('letters carry a short instruction, the site address and no secrets',()=>{
  const welcome=userMailMessage('welcome','Анна','https://daf-ru.kivaon.workers.dev/some/path'),editor=userMailMessage('editor','Анна','https://daf-ru.kivaon.workers.dev');
  assert.match(welcome.subject,/подключены/);assert.match(welcome.body,/Здравствуйте, Анна!/);assert.match(welcome.body,/https:\/\/daf-ru\.kivaon\.workers\.dev\./);assert.doesNotMatch(welcome.body,/some\/path/);
  assert.match(editor.subject,/право редактора/);for(const letter of [welcome,editor])assert.match(letter.body,/\n\nКоманда DAF-RU\n$/);assert.match(editor.body,/Подготовить весь лист/);assert.match(editor.body,/Сохранить и дальше/);
- assert.match(userMailMessage('welcome','  ','https://x.example').body,/Здравствуйте, коллега!/);
+ for(const name of ['  ','a@b.example'])assert.match(userMailMessage('welcome',name,'https://x.example').body,/^Здравствуйте!\n/);
 });
 
 test('delivery sends to the user address once, retries failures and gives up after the limit',async()=>{

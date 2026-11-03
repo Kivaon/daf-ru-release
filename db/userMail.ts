@@ -12,10 +12,10 @@ export function queueUserMail(db:D1Database,kind:UserMailKind,user:MailUser,key=
 }
 
 export function userMailMessage(kind:UserMailKind,name:string,origin:string){
- const site=new URL(origin).origin,who=name.trim()||'коллега';
+ const site=new URL(origin).origin,clean=name.trim(),greeting=clean&&!clean.includes('@')?`Здравствуйте, ${clean}!`:'Здравствуйте!';
  if(kind==='welcome')return {
   subject:'DAF-RU — вы подключены',
-  body:`Здравствуйте, ${who}!
+  body:`${greeting}
 
 Приветствуем Вас на нашем ресурсе DAF-RU — базе знаний в помощь изучающим Гемару на русском языке. Здесь Вы найдёте оригинальный текст Гемары и комментариев Раши и Тосфот, а также их перевод на русский.
 
@@ -34,7 +34,7 @@ export function userMailMessage(kind:UserMailKind,name:string,origin:string){
 `};
  return {
   subject:'DAF-RU — вам выдано право редактора',
-  body:`Здравствуйте, ${who}!
+  body:`${greeting}
 
 Команда DAF-RU приветствует Вас с вступлением в команду редакторов, которые могут создавать переводы и пояснения к Гемаре. Надеемся, что Вы понимаете, какой уровень ответственности принимаете на себя, работая над статьями.
 
