@@ -328,3 +328,42 @@ export function findOverflow<T extends { word: string; font?: string }>(columns:
   const found = findCommentary(columns.map((column) => column.filter((word) => !used.has(word))), comments.filter((comment) => !taken[comment.ref]), labels);
   return Object.fromEntries(Object.entries(found).filter(([, dibur]) => dibur.share >= .8 && dibur.size >= 3 && dibur.words.length <= dibur.size + 1));
 }
+
+type Zone = { ref: string; left: number; top: number; width: number; height: number };
+
+// The place that answers to a comment is not its words but the lines they stand in: between two
+// words and between two lines of the same comment the pointer is still inside the comment. Per
+// comment and line one area is made, from its first to its last word and from half the space
+// above the line to half the space below it (the lines of one column therefore touch).
+export function commentAreas(zones: Zone[], tolerance: number, gap: number): Zone[] {
+  if (!zones.length) return [];
+  const baseline = (zone: Zone) => zone.top + zone.height;
+  const lines = [...new Set(zones.map((zone) => Math.round(baseline(zone) / tolerance)))].sort((a, b) => a - b).map((key) => key * tolerance);
+  const steps = lines.slice(1).map((line, index) => line - lines[index]).filter((step) => step > tolerance && step < tolerance * 6).sort((a, b) => a - b);
+  const pitch = steps.length ? steps[Math.floor(steps.length / 2)] : tolerance * 3;
+  const areas: Zone[] = [];
+  const byRef = new Map<string, Zone[]>();
+  zones.forEach((zone) => { (byRef.get(zone.ref) ?? byRef.set(zone.ref, []).get(zone.ref)!).push(zone); });
+  byRef.forEach((own, ref) => {
+    const rows: Zone[][] = [];
+    for (const zone of [...own].sort((a, b) => baseline(a) - baseline(b))) {
+      const row = rows.find((candidate) => Math.abs(baseline(candidate[0]) - baseline(zone)) <= tolerance);
+      if (row) row.push(zone); else rows.push([zone]);
+    }
+    for (const row of rows) {
+      row.sort((a, b) => a.left - b.left);
+      let part: Zone[] = [row[0]];
+      const close = () => {
+        const left = Math.min(...part.map((zone) => zone.left)), right = Math.max(...part.map((zone) => zone.left + zone.width));
+        const top = Math.min(...part.map((zone) => zone.top)), bottom = Math.max(...part.map(baseline));
+        const extra = Math.max(0, (pitch - (bottom - top)) / 2);
+        areas.push({ ref, left, width: right - left, top: top - extra, height: bottom - top + 2 * extra });
+      };
+      for (const zone of row.slice(1)) {
+        if (zone.left - Math.max(...part.map((p) => p.left + p.width)) > gap) { close(); part = [zone]; } else part.push(zone);
+      }
+      close();
+    }
+  });
+  return areas;
+}

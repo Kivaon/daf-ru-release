@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {addOpeningWords,columnOrder,findCommentary,findDiburim,labelColumns,splitColumns} from '../app/pdfCommentary.ts';
+import {addOpeningWords,columnOrder,findCommentary,findDiburim,labelColumns,splitColumns,commentAreas} from '../app/pdfCommentary.ts';
 
 const word=(text:string,left:number,baseline:number)=>({word:text,left,top:baseline-10,width:20,height:10});
 
@@ -91,4 +91,16 @@ test('a line across both columns does not join them: its neighbours keep to thei
  assert.equal(columns.length,3);
  assert.ok(names.some((n)=>/^w+$/.test(n)),'the wide line is a column of its own');
  assert.ok(names.some((n)=>/^r+$/.test(n))&&names.some((n)=>/^l+$/.test(n)));
+});
+
+test('between two words and between two lines of one comment the pointer is still inside the comment',()=>{
+ const word=(ref:string,left:number,baseline:number)=>({ref,left,width:20,top:baseline-8,height:8});
+ const zones=[word('a',100,50),word('a',130,50),word('a',100,60),word('a',130,60),word('b',100,70),word('b',130,70)];
+ const areas=commentAreas(zones,3.5,30);
+ const at=(x:number,y:number)=>areas.find((a)=>x>=a.left&&x<=a.left+a.width&&y>=a.top&&y<=a.top+a.height)?.ref;
+ assert.equal(at(125,46),'a');   // in the gap between two words
+ assert.equal(at(110,55.5),'a'); // between the first and the second line of a
+ assert.equal(at(110,65.5),'b'); // between the second line of a and the line of b: half and half
+ assert.equal(at(110,59),'a');
+ assert.equal(at(300,46),undefined); // far from any word
 });

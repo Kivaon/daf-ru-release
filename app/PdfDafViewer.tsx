@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { CommentaryLink } from "./bekhorot2aCommentary";
 import { tokenLeft } from "./pdfWordOrder";
-import { addOpeningWords as addDiburOpening, decodeWord, editionWords, normalizeHebrew, sameEditionWord, splitColumns } from "./pdfCommentary";
+import { addOpeningWords as addDiburOpening, commentAreas, decodeWord, editionWords, normalizeHebrew, sameEditionWord, splitColumns } from "./pdfCommentary";
 import { locateCommentary } from "./pdfLocate";
 import { beginningPlace, sheetLabel } from "./pdfJump";
 import { centerScroll } from "./pdfScroll";
@@ -327,7 +327,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = Math.floor(viewport.width * ratio); canvas.height = Math.floor(viewport.height * ratio);
         canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
-        setSize({ width: viewport.width, height: viewport.height }); setBlocks(locatedBlocks); setCommentaryBlocks(locatedCommentary); setCommentaryZones(locatedZones);
+        setSize({ width: viewport.width, height: viewport.height }); setBlocks(locatedBlocks); setCommentaryBlocks(locatedCommentary); setCommentaryZones(commentAreas(locatedZones, 3.5 * zoom, 30 * zoom));
         renderTaskRef.current?.cancel();
         const context = canvas.getContext("2d", { alpha: false });
         if (!context) throw new Error("Canvas unavailable");
