@@ -103,27 +103,31 @@
 .jumpNote{text-align:center}.jumpNote p{margin:8px 0 12px}.jumpActions button{flex:1 1 0;min-width:0;text-align:center}
 
 /* Phone layout. What belongs only to the phone (burger menu, the icons at the top, the sheet frame) is hidden on wider screens. */
-.mobileActions,.menuOnly,.sheetPrint{display:none}
+.menuOnly,.sheetPrint{display:none}
 .replyNavigation{align-items:center}.replyPicker{flex:0 0 auto;margin:0 auto;border:1px solid #d2cec4;border-radius:7px;background:#faf8f2;color:#315f51;padding:7px 8px;font:12px Inter,system-ui,sans-serif;cursor:pointer}
 .panZoom{position:absolute;inset:0;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
 .panZoomContent{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+/* The header is the same on every width: the sign-in icons and the menu button outside, the rest in the menu. */
+.topbar{flex-wrap:nowrap;height:60px;min-height:60px;padding:0 22px;gap:12px;justify-content:space-between;transition:transform .2s ease;z-index:30}
+.topbar.topbarHidden{transform:translateY(-100%)}
+.brand{flex:0 0 auto;color:inherit;text-decoration:none;cursor:pointer}
+.mobileActions{display:flex;align-items:center;gap:8px;min-width:0}
+.mobileEmail{min-width:0;max-width:min(44vw,320px);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#dce8e3;font:12px Inter,system-ui,sans-serif}
+.mobileIcon,.menuToggle{display:grid;place-items:center;flex:0 0 auto;width:40px;height:38px;border:1px solid #53716b;border-radius:8px;background:transparent;color:#fff;text-decoration:none;cursor:pointer}
+.menuToggle{font-size:20px;line-height:1}
+.topbar .account{display:none;position:absolute;top:100%;left:auto;right:12px;width:min(320px,calc(100vw - 24px));margin:0;flex-direction:column;align-items:stretch;flex-wrap:nowrap;justify-content:flex-start;gap:2px;padding:8px;background:#153d35;border:1px solid rgba(255,255,255,.18);border-top:0;border-radius:0 0 12px 12px;box-shadow:0 14px 30px rgba(0,0,0,.35)}
+.topbar .account.open{display:flex}
+.topbar .account>:not(dialog){box-sizing:border-box;width:100%;min-height:46px;margin:0;padding:12px 10px;display:flex;align-items:center;justify-content:flex-start;gap:8px;border:0;border-radius:8px;background:transparent;color:#eef3f0;font:15px Inter,system-ui,sans-serif;text-align:left;text-decoration:none}
+.topbar .account>span,.topbar .account>.accountLink,.topbar .account>.signInButton{display:none}
+.topbar .account>.iconButton,.topbar .account>.aboutProjectButton,.topbar .account>.mapNavLink,.topbar .account>.menuOnly{display:flex}
+.topbar .account .iconButton span{display:inline}
+.topbar .account .mapNavLink{text-decoration:none;font-size:15px;color:#eef3f0}
+.topbar .account>:not(dialog):hover,.topbar .account>:not(dialog):focus-visible{background:rgba(255,255,255,.08)}
 @media(max-width:640px){
- .topbar{flex-wrap:nowrap;height:52px;min-height:52px;padding:0 12px 0 14px;gap:8px;justify-content:space-between;transition:transform .2s ease;z-index:30}
- .topbar.topbarHidden{transform:translateY(-100%)}
- .brand{font-size:20px;gap:10px;flex:0 0 auto}
+ .topbar{height:52px;min-height:52px;padding:0 12px 0 14px;gap:8px}
+ .brand{font-size:20px;gap:10px}
  .brandMark{width:32px;height:32px;font-size:20px}
- .mobileActions{display:flex;align-items:center;gap:8px;min-width:0}
- .mobileEmail{min-width:0;max-width:44vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#dce8e3;font:12px Inter,system-ui,sans-serif}
- .mobileIcon,.menuToggle{display:grid;place-items:center;flex:0 0 auto;width:40px;height:38px;border:1px solid #53716b;border-radius:8px;background:transparent;color:#fff;text-decoration:none;cursor:pointer}
- .menuToggle{font-size:20px;line-height:1}
- .topbar .account{display:none;position:absolute;top:100%;left:8px;right:8px;margin:0;flex-direction:column;align-items:stretch;flex-wrap:nowrap;justify-content:flex-start;gap:2px;padding:8px;background:#153d35;border:1px solid rgba(255,255,255,.18);border-top:0;border-radius:0 0 12px 12px;box-shadow:0 14px 30px rgba(0,0,0,.35)}
- .topbar .account.open{display:flex}
- .topbar .account>:not(dialog){box-sizing:border-box;width:100%;min-height:46px;margin:0;padding:12px 10px;display:flex;align-items:center;justify-content:flex-start;gap:8px;border:0;border-radius:8px;background:transparent;color:#eef3f0;font:15px Inter,system-ui,sans-serif;text-align:left;text-decoration:none}
- .topbar .account>span,.topbar .account>.accountLink,.topbar .account>.signInButton{display:none}
- .topbar .account>.iconButton,.topbar .account>.aboutProjectButton,.topbar .account>.mapNavLink,.topbar .account>.menuOnly{display:flex}
- .topbar .account .iconButton span{display:inline}
- .topbar .account .mapNavLink{text-decoration:none;font-size:15px;color:#eef3f0}
- .topbar .account>:not(dialog):hover,.topbar .account>:not(dialog):focus-visible{background:rgba(255,255,255,.08)}
+ .topbar .account{left:8px;right:8px;width:auto}
  .workspace{display:block}
  .dafPane{position:static;top:auto;height:auto;display:block;padding:6px 10px 12px;border-bottom:1px solid #d2d0c5}
  .compactNavigation{flex-wrap:nowrap;height:auto;gap:6px;padding:4px 0 8px;min-height:0}
