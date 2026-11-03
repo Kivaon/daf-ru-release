@@ -1,4 +1,5 @@
 import {deliverMail} from '../db/mailDelivery';
+import {deliverUserMail} from '../db/userMail';
 /** Cloudflare Worker entry point for the vinext-starter template. */
 import { handleImageOptimization, DEFAULT_DEVICE_SIZES, DEFAULT_IMAGE_SIZES } from "vinext/server/image-optimization";
 import handler from "vinext/server/app-router-entry";
@@ -44,7 +45,7 @@ const worker = {
     }
 
     const response=await handler.fetch(request, env, ctx);
-    if(url.pathname.startsWith('/api/')||url.pathname==='/translation-map'||url.pathname==='/')ctx.waitUntil(deliverMail(env.DB,env,url.origin).catch(()=>console.error('Mail queue unavailable')));
+    if(url.pathname.startsWith('/api/')||url.pathname==='/translation-map'||url.pathname==='/')ctx.waitUntil(deliverMail(env.DB,env,url.origin).catch(()=>console.error('Mail queue unavailable')).then(()=>deliverUserMail(env.DB,env,url.origin)).catch(()=>console.error('User mail queue unavailable')));
     return response;
   },
 };

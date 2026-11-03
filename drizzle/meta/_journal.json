@@ -29,6 +29,13 @@
       "when": 1791236261061,
       "tag": "0005_amazing_pet_avengers",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1791300000000,
+      "tag": "0006_user_mail",
+      "breakpoints": true
     }
   ]
 }

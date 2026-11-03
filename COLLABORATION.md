@@ -14,10 +14,12 @@
 5. **Данные пользователей** (выгрузки БД) хранить вне репозитория.
 6. Если один агент упёрся в ограничение (разрешения, доступ), он **останавливается, записывает причину в HANDOFF.md и не обходит защиту**.
 
-## Текущее состояние (18.10.2026)
+## Текущее состояние (03.11.2026)
 
-- Прод: Sites v81. Локально: `e6dc18d` (индекс начал Назир 31a–34a, новый формат подписей), проверено 73/73 тестов, typecheck, build. Не опубликовано из-за блокировки `write_stdin`.
-- Запасной путь: `MIGRATION-CLOUDFLARE.md`.
+- Прод: Cloudflare Worker `daf-ru` (https://daf-ru.kivaon.workers.dev), база D1 `daf-ru`, вход через Cloudflare Access (One-time PIN). Подробности — `MIGRATION-CLOUDFLARE.md` и `HANDOFF.md`. Публикация: `npm run build:cloudflare && npx wrangler deploy --config dist/server/wrangler.json` (только с подтверждения пользователя; миграции D1 — `wrangler d1 migrations apply daf-ru --remote --config wrangler.cloudflare.jsonc`).
+- Секреты Worker (`DAFRU_ADMIN_EMAIL`, `MAILJET_API_KEY`, `MAILJET_SECRET_KEY`) вводит только пользователь командой `wrangler secret put`.
+- Старый Sites (v81) остаётся до окончательной сверки и подтверждения пользователя, затем закрывается им. Публикации в Sites больше не делаем.
+- Роли разделены прежние: Claude Code и Codex оба работают в этом checkout по правилам выше; доступа к Cloudflare Zero Trust у агентов нет.
 
 ## Бэкап в Kivaon/daf-ru
 Время от времени (после каждого значимого релиза или крупного блока работ) состояние `daf-ru-release` копируется в бэкап `work/daf-ru` и отправляется в `Kivaon/daf-ru`. История у репозиториев разная, поэтому бэкап делается копированием файлов (без node_modules, dist, .next, .vinext, .wrangler, tmp и секретов), а не слиянием. Отправка на GitHub — только после подтверждения пользователя. Бэкап копирует только файлы из `git ls-files` (секреты и сборки не попадают). Оба репозитория на GitHub ПУБЛИЧНЫЕ: перед отправкой проверять, что в коммитах нет секретов, почт и имён пользователей. Последний бэкап: 19.10.2026 (содержимое daf-ru-release c243b7c).

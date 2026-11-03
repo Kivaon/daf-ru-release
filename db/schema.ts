@@ -47,3 +47,11 @@ export const mailJobs = sqliteTable('mail_jobs', {
  nextAt:integer('next_at').notNull().default(0), attempts:integer('attempts').notNull().default(0),
  lease:text('lease'), messageId:text('message_id'), error:text('error'), createdAt:text('created_at').notNull(),
 });
+
+// Welcome and role-change letters to users; one row per letter, PK makes queuing idempotent.
+export const userMailJobs = sqliteTable('user_mail_jobs', {
+ id:text('id').primaryKey(), userId:text('user_id').notNull(), email:text('email').notNull(), name:text('name').notNull(),
+ kind:text('kind').notNull(), status:text('status').notNull().default('pending'),
+ nextAt:integer('next_at').notNull().default(0), attempts:integer('attempts').notNull().default(0),
+ lease:text('lease'), messageId:text('message_id'), error:text('error'), createdAt:text('created_at').notNull(),
+});
