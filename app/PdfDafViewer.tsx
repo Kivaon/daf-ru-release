@@ -186,11 +186,14 @@ function addOpeningWords(blocks:Record<string,LocatedBlock>, candidates:WordRect
   return result;
 }
 
-export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [], neighborComments = [], onOpenPage }: {
+export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [], neighborComments = [], onOpenPage, dataReady = true }: {
   zoom: number; selectedBlock: string; onSelect: (blockId: string, word: string) => void; onBlockLocated: (blockId?: string) => void;
   landingEdge?: "start"|"end";
   pdfUrl?: string; label?: string; segments?: DafSegment[]; commentary?: CommentaryLink[];
   neighborComments?: CommentaryLink[]; onOpenPage?: (pageKey: string, blockId?: string) => void;
+  // false while the text and the comments of the sheet are still being fetched: the sheet is then not drawn yet,
+  // so that it appears once, already marked
+  dataReady?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -207,6 +210,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [pageTip, setPageTip] = useState<{ x: number; y: number; text: string } | null>(null);
 
   useEffect(() => {
+    if (!dataReady) { setStatus("loading"); return; }
     let cancelled = false;
     // every opened document starts its own worker thread; it is closed as soon as the
     // sheet is drawn (or abandoned), otherwise the workers pile up while pages are turned
@@ -325,7 +329,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     }
     renderPdf();
     return () => { cancelled = true; renderTaskRef.current?.cancel(); void loadingTask?.destroy?.(); };
-  }, [zoom, onBlockLocated, pdfUrl, segments, commentary, neighborComments, landingEdge]);
+  }, [zoom, onBlockLocated, pdfUrl, segments, commentary, neighborComments, landingEdge, dataReady]);
 
   const selected = blocks[selectedBlock];
   const linkedComments = commentary.filter((comment) => comment.base === selectedBlock);
@@ -344,13 +348,13 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const tractateLabel=label.replace(/\s+\d+[аб]$/,"");
   return <div className="pdfStage" style={{ width: size.width, height: size.height }}>
     <canvas ref={canvasRef} aria-label={`Оригинальный PDF, ${label}`} />
-    {status === "loading" && <div className="pdfStatus">Загружаем оригинальный PDF…</div>}
+    {status === "loading" && <div className="pdfStatus"><div>{dataReady ? "Размечаем лист…" : "Загружаем лист и комментарии Sefaria…"}<small>Подсветка реплик и комментариев появится, когда загрузка закончится.</small></div></div>}
     {status === "error" && <div className="pdfStatus error">Не удалось открыть PDF.<small>{errorMessage}</small><a href={pdfUrl}>Открыть оригинал</a></div>}
     {status === "ready" && alignmentWarning && <div className="alignmentWarning">{tractateLabel} · {Object.keys(blocks).length ? "Лист размечен частично: " : "Лист открыт, интерактивная разметка отключена: "}{alignmentWarning}</div>}
     {status === "ready" && <div className="pdfInteraction" aria-label="Интерактивный слой оригинального листа" data-active-comment={hoveredComment ?? ""}>
       {selected?.lines.map((rect, index) => <span key={`selected-${index}`} className="textHighlight selectedHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />)}
       {previews.flatMap((block, blockIndex) => block.lines.map((rect, index) => <span key={`preview-${blockIndex}-${index}`} className="textHighlight hoverHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
-      {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || previewedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
+      {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || previewedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}${linkedRefs.has(comment.ref) ? "" : " previewDibur"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
       <div className="commentaryPad" onPointerMove={(event) => {
         const box = event.currentTarget.getBoundingClientRect();
         const x = event.clientX - box.left, y = event.clientY - box.top;

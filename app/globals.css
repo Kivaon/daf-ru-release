@@ -98,3 +98,4 @@
 
 .pageTip{position:absolute;z-index:6;pointer-events:none;white-space:nowrap;background:#173f35;color:#fff;border-radius:4px;padding:4px 8px;font:11px Inter,system-ui,sans-serif;box-shadow:0 3px 10px rgba(25,48,40,.25)}
 .commentaryPad{position:absolute;inset:0;z-index:1;cursor:default}
+.commentaryHighlight.previewDibur.rashiPdfHighlight{background:rgba(0,190,90,.2)}.commentaryHighlight.previewDibur.tosafotPdfHighlight{background:rgba(10,150,255,.2)}.pdfStatus small{display:block;margin-top:6px;color:#8a938e}.pdfStatus>div{text-align:center;padding:0 24px}
