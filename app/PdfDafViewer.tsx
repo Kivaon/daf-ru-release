@@ -204,7 +204,6 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [blocks, setBlocks] = useState<Record<string, LocatedBlock>>({});
   const [commentaryBlocks, setCommentaryBlocks] = useState<Record<string, LocatedBlock>>({});
   const [commentaryZones, setCommentaryZones] = useState<Array<TextRect & { ref: string }>>([]);
-  const [replyHits, setReplyHits] = useState<Record<string, WordRect[]>>({});
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
   const [hoveredComment, setHoveredComment] = useState<string | null>(null);
   const [pageTip, setPageTip] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -303,6 +302,10 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
           // the large first words and the "גמ'" / "מתני'" sign belong to their dibur too
           // (in front, so that they win over the alignment, which may give them to the comment before)
           locatedZones.unshift(...Object.entries(opened).flatMap(([ref, words]) => words.filter((word) => !located.zones.has(word as never)).map((word) => ({ ref, left: word.left, top: word.top, width: word.width, height: word.height }))));
+          // a sign or a large first word that belongs to a comment's dibur is not part of the reply, even if its letters
+          // are those of the reply's own first word ("גמ'" / "מתני'"): the reply is marked without it and it answers to the comment
+          const inZone = (word: WordRect) => { const x = word.left + word.width / 2, y = word.top + word.height / 2; return locatedZones.some((zone) => x >= zone.left && x <= zone.left + zone.width && y >= zone.top && y <= zone.top + zone.height); };
+          locatedBlocks = Object.fromEntries(Object.entries(locatedBlocks).map(([id, block]) => { const words = block.words.filter((word) => !inZone(word)); return [id, words.length === block.words.length ? block : { words, lines: lineRects(words) }]; }));
         } catch (reason) {
           mappingError = reason instanceof Error ? reason.message : String(reason);
         }
@@ -312,8 +315,6 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         canvas.width = Math.floor(viewport.width * ratio); canvas.height = Math.floor(viewport.height * ratio);
         canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
         setSize({ width: viewport.width, height: viewport.height }); setBlocks(locatedBlocks); setCommentaryBlocks(locatedCommentary); setCommentaryZones(locatedZones);
-        // a word that is part of a comment's dibur answers to the comment, even if it is also a word of the reply
-        setReplyHits(Object.fromEntries(Object.entries(locatedBlocks).map(([id, block]) => [id, block.words.filter((word) => { const x = word.left + word.width / 2, y = word.top + word.height / 2; return !locatedZones.some((zone) => x >= zone.left && x <= zone.left + zone.width && y >= zone.top && y <= zone.top + zone.height); })])));
         renderTaskRef.current?.cancel();
         const context = canvas.getContext("2d", { alpha: false });
         if (!context) throw new Error("Canvas unavailable");
@@ -371,7 +372,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         if (target) onSelect(target, "");
       }} />
       {pageTip && <div className="pageTip" style={{ left: pageTip.x, top: pageTip.y }}>{pageTip.text}</div>}
-      {Object.entries(blocks).flatMap(([blockId, block]) => (replyHits[blockId] ?? block.words).map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
+      {Object.entries(blocks).flatMap(([blockId, block]) => block.words.map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
     </div>}
   </div>;
 }
