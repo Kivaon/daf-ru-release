@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { getChatGPTUser } from "../../chatgpt-auth";
 import { registerAndGetRole } from "../../roles";
 import { queueUserMail } from "../../../db/userMail";
+import { deleteUser } from "../../../db/userAdmin";
 
 export async function GET(){
   const user=await getChatGPTUser(), role=await registerAndGetRole(user);
@@ -20,4 +21,14 @@ export async function PATCH(request:Request){
   await env.DB.prepare("UPDATE users SET role = ?, updated_at = ? WHERE user_id = ? AND role != 'admin'").bind(nextRole,now,userId).run();
   if(nextRole==="editor"&&target?.role==="reader"){try{await queueUserMail(env.DB,"editor",{userId,email:target.email,name:target.name},now).run();}catch{console.error("Editor mail not queued");}}
   return Response.json({ok:true,userId,role:nextRole});
+}
+
+export async function DELETE(request:Request){
+  const user=await getChatGPTUser(), role=await registerAndGetRole(user);
+  if(role!=="admin")return Response.json({error:"Недостаточно прав"},{status:403});
+  const body=await request.json() as {userId?:unknown};
+  const userId=typeof body.userId==="string"?body.userId:"";
+  if(!userId||userId===user?.userId)return Response.json({error:"Некорректные данные"},{status:400});
+  const result=await deleteUser(env.DB,userId);
+  return result.ok?Response.json({ok:true,userId}):Response.json({error:result.error},{status:result.status});
 }
