@@ -1,9 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CommentaryLink } from "./bekhorot2aCommentary";
 import { tokenLeft } from "./pdfWordOrder";
-import { addOpeningWords as addDiburOpening, decodeWord, editionWords, findCommentary, findOverflow, labelColumns, normalizeHebrew, sameEditionWord, splitColumns } from "./pdfCommentary";
+import { addOpeningWords as addDiburOpening, decodeWord, editionWords, normalizeHebrew, sameEditionWord, splitColumns } from "./pdfCommentary";
+import { locateCommentary } from "./pdfLocate";
 
 export type DafSegment = { id: string; kind: string; text: string };
 
@@ -131,14 +132,15 @@ function alignSefariaToPdf(pdfWords: WordRect[], segments: DafSegment[]) {
 // limit a stalled answer leaves the page on "loading" forever.
 async function fetchPdf(url: string) {
   let failure = "Сервер листов не ответил. Обновите страницу.";
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt) await new Promise((resolve) => setTimeout(resolve, attempt * 900));
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 20000);
     try {
       const response = await fetch(url, { cache: "force-cache", credentials: "same-origin", signal: controller.signal });
       if (response.ok) return response;
       failure = `PDF request failed: ${response.status}`;
-    } catch { /* retry once, then report */ } finally { clearTimeout(timer); }
+    } catch { /* retry, then report */ } finally { clearTimeout(timer); }
   }
   throw new Error(failure);
 }
@@ -198,6 +200,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [alignmentWarning, setAlignmentWarning] = useState("");
   const [blocks, setBlocks] = useState<Record<string, LocatedBlock>>({});
   const [commentaryBlocks, setCommentaryBlocks] = useState<Record<string, LocatedBlock>>({});
+  const [commentaryZones, setCommentaryZones] = useState<Array<TextRect & { ref: string }>>([]);
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
   const [hoveredComment, setHoveredComment] = useState<string | null>(null);
   const [pageTip, setPageTip] = useState<{ x: number; y: number; text: string } | null>(null);
@@ -278,15 +281,14 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         // Diburim are also set in a larger bold face (taller than the Gemara, in a
         // font of its own); those words belong to the commentary stream too.
         const commentaryColumns = splitColumns(makeWords((item) => isOnPage(item) && ((item.height >= 9.5 && item.height < gemaraHeight - 1.5) || (item.height > gemaraHeight + .4 && item.height < gemaraHeight + 4.5 && item.fontName !== gemaraFont))), 3.5 * zoom, 7 * zoom, makeWords((item) => isOnPage(item) && item.height < 9.5));
-        let locatedBlocks: Record<string, LocatedBlock> = {}, locatedCommentary: Record<string, LocatedBlock> = {}, mappingError = "", mappingNotice = "";
+        let locatedBlocks: Record<string, LocatedBlock> = {}, locatedCommentary: Record<string, LocatedBlock> = {}, locatedZones: Array<TextRect & { ref: string }> = [], mappingError = "", mappingNotice = "";
         try {
           const alignment = segments.length?alignSefariaToPdf(pdfWords, segments):{blocks:{},warnings:[]};
           locatedBlocks = addOpeningWords(alignment.blocks, openingCandidates, segments, zoom);
           mappingNotice = alignment.warnings.join(" · ");
-          const labels = labelColumns(commentaryColumns, commentary);
-          const ownFound = findCommentary(commentaryColumns, commentary, labels);
-          const overflow = neighborComments.length ? findOverflow(commentaryColumns, labels, ownFound, neighborComments) : {};
-          locatedCommentary = asBlocks(addDiburOpening({ ...ownFound, ...overflow }, makeWords((item) => isOnPage(item)), zoom));
+          const located = locateCommentary(commentaryColumns, commentary, neighborComments);
+          locatedCommentary = asBlocks(addDiburOpening(located.diburs, makeWords((item) => isOnPage(item)), zoom));
+          located.zones.forEach((ref, word) => locatedZones.push({ ref, left: word.left, top: word.top, width: word.width, height: word.height }));
         } catch (reason) {
           mappingError = reason instanceof Error ? reason.message : String(reason);
         }
@@ -295,7 +297,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = Math.floor(viewport.width * ratio); canvas.height = Math.floor(viewport.height * ratio);
         canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
-        setSize({ width: viewport.width, height: viewport.height }); setBlocks(locatedBlocks); setCommentaryBlocks(locatedCommentary);
+        setSize({ width: viewport.width, height: viewport.height }); setBlocks(locatedBlocks); setCommentaryBlocks(locatedCommentary); setCommentaryZones(locatedZones);
         renderTaskRef.current?.cancel();
         const context = canvas.getContext("2d", { alpha: false });
         if (!context) throw new Error("Canvas unavailable");
@@ -334,14 +336,21 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
       {selected?.lines.map((rect, index) => <span key={`selected-${index}`} className="textHighlight selectedHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />)}
       {previews.flatMap((block, blockIndex) => block.lines.map((rect, index) => <span key={`preview-${blockIndex}-${index}`} className="textHighlight hoverHighlight" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
       {uniqueComments.filter((comment) => linkedRefs.has(comment.ref) || comment.ref === hoveredComment).flatMap((comment) => (commentaryBlocks[comment.ref]?.lines ?? []).map((rect, index) => <span key={`${comment.ref}-${index}`} className={`textHighlight commentaryHighlight ${comment.commentator === "Rashi" ? "rashiPdfHighlight" : "tosafotPdfHighlight"}`} style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} />))}
-      {uniqueComments.flatMap((comment) => (commentaryBlocks[comment.ref]?.words ?? []).map((rect, index) => {
-        const elsewhere = neighborRefs.has(comment.ref);
-        const pageKey = comment.base.split(":")[0];
-        const tipText = `${comment.commentator === "Rashi" ? "Раши" : "Тосафот"} · см. ${pageKey.replace(/a$/, "а").replace(/b$/, "б")}`;
-        const showTip = (event: ReactPointerEvent<HTMLButtonElement>) => { if (!elsewhere) return; const box = event.currentTarget.parentElement!.getBoundingClientRect(); setPageTip({ x: event.clientX - box.left + 12, y: event.clientY - box.top + 16, text: tipText }); };
-        const leave = () => { setHoveredComment(null); setPageTip(null); };
-        return <button key={`comment-hit-${comment.ref}-${index}`} className="commentaryHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={(event) => { setHoveredComment(comment.ref); showTip(event); }} onPointerMove={showTip} onPointerLeave={leave} onFocus={() => setHoveredComment(comment.ref)} onBlur={leave} onClick={() => { if (elsewhere) { onOpenPage?.(pageKey); return; } const bases = commentBases[comment.ref] ?? []; const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]); if (target) onSelect(target, ""); }} aria-label={elsewhere ? `${tipText}: ${comment.dibur}` : `${comment.commentator === "Rashi" ? "Раши" : "Тосафот"}: ${comment.dibur}; показать реплику`} />;
-      }))}
+      <div className="commentaryPad" onPointerMove={(event) => {
+        const box = event.currentTarget.getBoundingClientRect();
+        const x = event.clientX - box.left, y = event.clientY - box.top;
+        const zone = commentaryZones.find((rect) => x >= rect.left - 1 && x <= rect.left + rect.width + 1 && y >= rect.top - 1 && y <= rect.top + rect.height + 1);
+        setHoveredComment(zone?.ref ?? null);
+        const comment = zone ? allComments.find((item) => item.ref === zone.ref) : undefined;
+        if (zone && comment && neighborRefs.has(zone.ref)) setPageTip({ x: x + 12, y: y + 16, text: `${comment.commentator === "Rashi" ? "Раши" : "Тосафот"} · см. ${comment.base.split(":")[0].replace(/a$/, "а").replace(/b$/, "б")}` });
+        else setPageTip(null);
+      }} onPointerLeave={() => { setHoveredComment(null); setPageTip(null); }} onClick={() => {
+        if (!hoveredComment) return;
+        if (neighborRefs.has(hoveredComment)) { const comment = allComments.find((item) => item.ref === hoveredComment); if (comment) onOpenPage?.(comment.base.split(":")[0]); return; }
+        const bases = commentBases[hoveredComment] ?? [];
+        const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]);
+        if (target) onSelect(target, "");
+      }} />
       {pageTip && <div className="pageTip" style={{ left: pageTip.x, top: pageTip.y }}>{pageTip.text}</div>}
       {Object.entries(blocks).flatMap(([blockId, block]) => block.words.map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
     </div>}

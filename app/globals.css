@@ -97,3 +97,4 @@
 .printedLocation{font-size:13px;line-height:1.6;color:#657064;margin:10px 0 16px}.printedLocation a{color:inherit;text-decoration:underline;text-underline-offset:3px}
 
 .pageTip{position:absolute;z-index:6;pointer-events:none;white-space:nowrap;background:#173f35;color:#fff;border-radius:4px;padding:4px 8px;font:11px Inter,system-ui,sans-serif;box-shadow:0 3px 10px rgba(25,48,40,.25)}
+.commentaryPad{position:absolute;inset:0;z-index:1;cursor:default}

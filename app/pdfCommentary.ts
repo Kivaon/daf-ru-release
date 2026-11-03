@@ -99,7 +99,7 @@ const withoutNun = (word: string) => word.replace(/[נן]/g, "");
 // Print and Sefaria also differ in plene spelling (ליה / לה), so vowel letters are
 // dropped as a last resort, provided at least two letters remain.
 const skeleton = (word: string) => withoutNun(word).replace(/[יו]/g, "");
-const sameLoosely = (source: string, printed: string) => sameEditionWord(source, printed)
+export const sameLoosely = (source: string, printed: string) => sameEditionWord(source, printed)
   || (printed.length > 0 && withoutNun(source).length >= 2 && sameEditionWord(withoutNun(source), withoutNun(printed)))
   || (skeleton(source).length >= 2 && skeleton(source) === skeleton(printed));
 
@@ -109,7 +109,7 @@ type Candidate = { first: number; last: number; score: number; matched: number; 
 
 // Position of a comment in Sefaria's order ("… 46a:2:3" is the third comment on
 // the second reply), and the sheet it belongs to.
-const orderKey = (ref: string) => { const found = ref.match(/(\d+[ab]):(\d+):(\d+)$/); return found ? { page: found[1], rank: Number(found[2]) * 1000 + Number(found[3]) } : undefined; };
+export const orderKey = (ref: string) => { const found = ref.match(/(\d+[ab]):(\d+):(\d+)$/); return found ? { page: found[1], rank: Number(found[2]) * 1000 + Number(found[3]) } : undefined; };
 
 export function findDiburim<T extends { word: string; font?: string }>(pdfWords: T[], comments: CommentLike[]) {
   if (!comments.length || !pdfWords.length) return {} as Record<string, FoundDibur<T>>;
@@ -270,16 +270,27 @@ export function labelColumns<T extends { word: string; font?: string }>(columns:
   });
 }
 
-export function findCommentary<T extends { word: string; font?: string }>(columns: T[][], comments: Array<CommentLike & Commented>, labels: Array<string | undefined>) {
+export type Labels<T> = Array<string | undefined> | ((word: T) => string | undefined);
+
+const labelFunction = <T,>(columns: T[][], labels: Labels<T>) => {
+  if (typeof labels === "function") return labels;
+  const columnOf = new Map<T, number>();
+  columns.forEach((column, index) => column.forEach((word) => columnOf.set(word, index)));
+  return (word: T) => labels[columnOf.get(word)!];
+};
+
+export function findCommentary<T extends { word: string; font?: string }>(columns: T[][], comments: Array<CommentLike & Commented>, labels: Labels<T>) {
+  const labelOf = labelFunction(columns, labels);
+  const flat = columns.flat();
   const result: Record<string, FoundDibur<T>> = {};
   for (const commentator of new Set(comments.map((comment) => comment.commentator))) {
     const own = comments.filter((comment) => comment.commentator === commentator);
-    Object.assign(result, findDiburim(columns.filter((_, index) => !labels[index] || labels[index] === commentator).flat(), own));
+    Object.assign(result, findDiburim(flat.filter((word) => !labelOf(word) || labelOf(word) === commentator), own));
     // A column can be labelled wrongly where the two commentaries meet, so what is
     // missing is also looked for in the other columns, but only as a whole dibur.
     const missing = own.filter((comment) => !result[comment.ref]);
     if (missing.length) {
-      const elsewhere = findDiburim(columns.filter((_, index) => labels[index] && labels[index] !== commentator).flat(), missing);
+      const elsewhere = findDiburim(flat.filter((word) => labelOf(word) && labelOf(word) !== commentator), missing);
       Object.entries(elsewhere).filter(([, dibur]) => dibur.whole).forEach(([ref, dibur]) => { result[ref] = dibur; });
     }
   }
@@ -291,7 +302,7 @@ export function findCommentary<T extends { word: string; font?: string }>(column
 // this sheet has taken, and only accepted when nearly the whole dibur is found,
 // since a short dibur would otherwise match any chance repetition; the printed
 // words must also be hardly more than the dibur's own.
-export function findOverflow<T extends { word: string; font?: string }>(columns: T[][], labels: Array<string | undefined>, taken: Record<string, FoundDibur<T>>, comments: Array<CommentLike & Commented>) {
+export function findOverflow<T extends { word: string; font?: string }>(columns: T[][], labels: Labels<T>, taken: Record<string, FoundDibur<T>>, comments: Array<CommentLike & Commented>) {
   const used = new Set<T>(Object.values(taken).flatMap((dibur) => dibur.words));
   const found = findCommentary(columns.map((column) => column.filter((word) => !used.has(word))), comments.filter((comment) => !taken[comment.ref]), labels);
   return Object.fromEntries(Object.entries(found).filter(([, dibur]) => dibur.share >= .8 && dibur.size >= 3 && dibur.words.length <= dibur.size + 1));
