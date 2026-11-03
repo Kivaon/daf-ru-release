@@ -212,6 +212,8 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
   const [hoveredComment, setHoveredComment] = useState<string | null>(null);
   const [pageTip, setPageTip] = useState<{ x: number; y: number; text: string } | null>(null);
+  // a comment printed on this sheet but belonging to another one: asked about before the sheet is left
+  const [jump, setJump] = useState<{ x: number; y: number; comment: CommentaryLink } | null>(null);
 
   useEffect(() => {
     if (!dataReady) { setStatus("loading"); return; }
@@ -356,6 +358,12 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     ...(hoveredBlock && hoveredBlock !== selectedBlock ? [blocks[hoveredBlock]] : []),
     ...hoveredBases.filter((base) => base !== selectedBlock).map((base) => blocks[base]),
   ].filter(Boolean);
+  useEffect(() => {
+    if (!jump) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setJump(null); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [jump]);
   const zoneAt = (event: { clientX: number; clientY: number; currentTarget: HTMLElement }) => {
     const box = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - box.left, y = event.clientY - box.top;
@@ -395,12 +403,23 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         // the place is taken from the click itself: a finger moves nothing before it touches
         const ref = zoneAt(event).zone?.ref;
         if (!ref) return;
-        if (neighborRefs.has(ref)) { const comment = allComments.find((item) => item.ref === ref); if (comment) onOpenPage?.(comment.base.split(":")[0], comment.base); return; }
+        setJump(null);
+        if (neighborRefs.has(ref)) { const comment = allComments.find((item) => item.ref === ref); const at = zoneAt(event); if (comment) setJump({ x: at.x, y: at.y, comment }); return; }
         const bases = commentBases[ref] ?? [];
         const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]);
         if (target) onSelect(target, "");
       }} />
       {pageTip && <div className="pageTip" style={{ left: pageTip.x, top: pageTip.y }}>{pageTip.text}</div>}
+      {jump && (() => {
+        const { comment } = jump, pageKey = comment.base.split(":")[0], sheet = pageKey.replace(/a$/, "а").replace(/b$/, "б");
+        const who = comment.commentator === "Rashi" ? "Раши" : "Тосафот";
+        return <div className={`jumpNote ${comment.commentator === "Rashi" ? "jumpRashi" : "jumpTosafot"}`} role="dialog" aria-label={`${who}: комментарий к листу ${sheet}`} style={{ left: Math.max(8, Math.min(jump.x, size.width - 268)), top: Math.max(8, Math.min(jump.y + 14, size.height - 215)) }}>
+          <small>{who} · к листу {sheet}</small>
+          <span className="jumpDibur" lang="he" dir="rtl">{comment.dibur}</span>
+          <p>Этот комментарий напечатан здесь, но объясняет реплику на другом листе.</p>
+          <div className="jumpActions"><button className="jumpGo" onClick={() => { setJump(null); onOpenPage?.(pageKey, comment.base); }}>Перейти к {sheet}</button><button className="jumpStay" onClick={() => setJump(null)}>Остаться</button></div>
+        </div>;
+      })()}
       {Object.entries(blocks).flatMap(([blockId, block]) => block.words.map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
     </div>}
   </div>;
