@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {addOpeningWords,columnOrder,findCommentary,findDiburim} from '../app/pdfCommentary.ts';
+import {addOpeningWords,columnOrder,findCommentary,findDiburim,labelColumns} from '../app/pdfCommentary.ts';
 
 const word=(text:string,left:number,baseline:number)=>({word:text,left,top:baseline-10,width:20,height:10});
 
@@ -44,11 +44,21 @@ test('larger opening words of a dibur are taken from the right of its first foun
  assert.deepEqual(result.r.map(w=>w.word),['יש','בכור','לנחלה']);
 });
 
-test('a dibur that both commentators begin with is taken from its own side of the page',()=>{
- const left=(text:string,i:number)=>word(text,150,100+i*12);
- const right=(text:string,i:number)=>word(text,550,100+i*12);
- const words=[right('אחד',0),right('שני',1),right('שלישי',2),right('שלום',3),left('שלום',3),left('מילה',4)];
- const comments=[{ref:'a',dibur:'אחד',commentator:'Rashi'},{ref:'b',dibur:'שני',commentator:'Rashi'},{ref:'c',dibur:'שלישי',commentator:'Rashi'},{ref:'d',dibur:'שלום',commentator:'Rashi'}];
- const found=findCommentary(words,comments,350);
+test('a dibur both commentators begin with is taken only from its own commentator\'s column',()=>{
+ const right=['אחד','שני','שלישי','שלום'].map((text,i)=>word(text,550,100+i*12));
+ const left=['מילה','אות','שלום'].map((text,i)=>word(text,150,100+i*12));
+ const columns=[right,left];
+ const comments=[
+  {ref:'a',dibur:'אחד',commentator:'Rashi'},{ref:'b',dibur:'שני',commentator:'Rashi'},{ref:'d',dibur:'שלום',commentator:'Rashi'},
+  {ref:'m',dibur:'מילה',commentator:'Tosafot'},{ref:'o',dibur:'אות',commentator:'Tosafot'},
+ ];
+ const labels=labelColumns(columns,comments);
+ assert.deepEqual(labels,['Rashi','Tosafot']);
+ const found=findCommentary(columns,comments,labels);
  assert.equal(found.d.words[0].left,550);
+});
+
+test('a dibur spelled with and without yod is still found',()=>{
+ const found=findDiburim(printed('בהמה','לית','לה','פרוזדור'),[{ref:'r',dibur:'בהמה לית ליה פרוזדור'}]);
+ assert.equal(found.r.words.length,4);
 });

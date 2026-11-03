@@ -46,11 +46,15 @@ export function sameEditionWord(first: string, second: string) {
 // the next line, so words are read column by column, each column top to bottom
 // and each line right to left. A column is a chain of line fragments separated
 // from their neighbours on the same line by more than `gap`.
-export function columnOrder<T extends { left: number; width: number; top: number; height: number }>(words: T[], tolerance: number, gap: number): T[] {
+// `fillers` are other printed marks (footnote markers and the like) that are not
+// searched: a line is not split at a gap of up to seven times `gap` when one of
+// them stands in it.
+export function splitColumns<T extends { left: number; width: number; top: number; height: number }>(words: T[], tolerance: number, gap: number, fillers: T[] = []): T[][] {
+  const filler = new Set<T>(fillers);
   const baseline = (word: T) => word.top + word.height;
   const rows: T[][] = [];
   let anchor = -Infinity;
-  for (const word of [...words].sort((a, b) => baseline(a) - baseline(b))) {
+  for (const word of [...words, ...fillers].sort((a, b) => baseline(a) - baseline(b))) {
     if (!rows.length || baseline(word) - anchor > tolerance) { rows.push([]); anchor = baseline(word); }
     rows.at(-1)!.push(word);
   }
@@ -60,11 +64,15 @@ export function columnOrder<T extends { left: number; width: number; top: number
   for (const row of rows) {
     row.sort((a, b) => b.left - a.left);
     const fragments: Fragment[] = [];
-    let current: T[] = [row[0]];
-    for (const word of row.slice(1)) {
-      const previous = current.at(-1)!;
-      if (previous.left - (word.left + word.width) > gap) { fragments.push({ words: current, left: 0, right: 0 }); current = [word]; } else current.push(word);
+    let current: T[] = [];
+    let bridged = false;
+    for (const word of row) {
+      if (filler.has(word)) { bridged = true; continue; }
+      const previous = current.at(-1);
+      if (previous && !(bridged && previous.left - (word.left + word.width) <= gap * 7) && previous.left - (word.left + word.width) > gap) { fragments.push({ words: current, left: 0, right: 0 }); current = [word]; } else current.push(word);
+      bridged = false;
     }
+    if (!current.length) continue;
     fragments.push({ words: current, left: 0, right: 0 });
     for (const fragment of fragments) {
       fragment.left = Math.min(...fragment.words.map((word) => word.left));
@@ -79,14 +87,21 @@ export function columnOrder<T extends { left: number; width: number; top: number
       best.left = Math.min(best.left, fragment.left); best.right = Math.max(best.right, fragment.right);
     }
   }
-  return columns.sort((a, b) => b.right - a.right).flatMap((column) => column.fragments.flatMap((fragment) => fragment.words));
+  return columns.sort((a, b) => b.right - a.right).map((column) => column.fragments.flatMap((fragment) => fragment.words));
 }
+
+export const columnOrder = <T extends { left: number; width: number; top: number; height: number }>(words: T[], tolerance: number, gap: number, fillers: T[] = []) => splitColumns(words, tolerance, gap, fillers).flat();
 
 // Small print loses or splits letters: the nun of a word may come out as a space
 // ("סנדל" as "ס דל") or vanish. A source word therefore also matches two or three
 // consecutive PDF tokens joined together, and nun is ignored when comparing.
 const withoutNun = (word: string) => word.replace(/[נן]/g, "");
-const sameLoosely = (source: string, printed: string) => sameEditionWord(source, printed) || (printed.length > 0 && withoutNun(source).length >= 2 && sameEditionWord(withoutNun(source), withoutNun(printed)));
+// Print and Sefaria also differ in plene spelling (ליה / לה), so vowel letters are
+// dropped as a last resort, provided at least two letters remain.
+const skeleton = (word: string) => withoutNun(word).replace(/[יו]/g, "");
+const sameLoosely = (source: string, printed: string) => sameEditionWord(source, printed)
+  || (printed.length > 0 && withoutNun(source).length >= 2 && sameEditionWord(withoutNun(source), withoutNun(printed)))
+  || (skeleton(source).length >= 2 && skeleton(source) === skeleton(printed));
 
 export type FoundDibur<T> = { words: T[]; opening: string[]; whole: boolean; share: number; size: number };
 
@@ -163,24 +178,42 @@ export function addOpeningWords<T extends Placed>(found: Record<string, FoundDib
   })) as Record<string, T[]>;
 }
 
-// Rashi stands on one side of the Gemara and Tosafot on the other, both on the
-// whole page. The side of each commentator is learned from the diburim that
-// match unambiguously, then the search is repeated within that side only and
-// takes precedence, so a dibur that Rashi and Tosafot both begin with is not
-// taken from the wrong one.
-export function findCommentary<T extends { word: string; font?: string; left: number; width: number }>(pdfWords: T[], comments: Array<CommentLike & { commentator: string }>, pageCenter: number) {
-  const sideOf = (word: T) => (word.left + word.width / 2 < pageCenter ? "left" : "right");
+type Commented = { commentator: string };
+
+// Rashi and Tosafot are told apart by column: a column in which a comment of one
+// of them is found with every word of its dibur belongs to that commentator
+// (as long as no comment of the other is found whole in it). The search for
+// each commentator then skips the other's columns, so a dibur that both begin
+// with, or one that Sefaria quotes shorter than the print, cannot land there.
+export function labelColumns<T extends { word: string; font?: string }>(columns: T[][], comments: Array<CommentLike & Commented>) {
+  const flat = columns.flat();
+  const columnOf = new Map<T, number>();
+  columns.forEach((column, index) => column.forEach((word) => columnOf.set(word, index)));
+  const votes = columns.map(() => new Map<string, number>());
+  for (const commentator of new Set(comments.map((comment) => comment.commentator))) {
+    Object.values(findDiburim(flat, comments.filter((comment) => comment.commentator === commentator)))
+      .filter((dibur) => dibur.whole)
+      .forEach((dibur) => { const tally = votes[columnOf.get(dibur.words[0])!]; tally.set(commentator, (tally.get(commentator) ?? 0) + 1); });
+  }
+  return votes.map((tally) => {
+    const ranked = [...tally].sort((a, b) => b[1] - a[1]);
+    const total = ranked.reduce((sum, entry) => sum + entry[1], 0);
+    return ranked.length && ranked[0][1] / total >= .8 ? ranked[0][0] : undefined;
+  });
+}
+
+export function findCommentary<T extends { word: string; font?: string }>(columns: T[][], comments: Array<CommentLike & Commented>, labels: Array<string | undefined>) {
   const result: Record<string, FoundDibur<T>> = {};
   for (const commentator of new Set(comments.map((comment) => comment.commentator))) {
     const own = comments.filter((comment) => comment.commentator === commentator);
-    const first = findDiburim(pdfWords, own);
-    const votes = { left: 0, right: 0 };
-    Object.values(first).filter((dibur) => dibur.whole).forEach((dibur) => { votes[sideOf(dibur.words[0])]++; });
-    const total = votes.left + votes.right;
-    const side = total >= 3 && Math.max(votes.left, votes.right) / total >= .7 ? (votes.left > votes.right ? "left" : "right") : undefined;
-    // Near the page bottom the columns widen under the Gemara, so a dibur that
-    // is not found on its own side is taken from the unrestricted search.
-    Object.assign(result, first, side ? findDiburim(pdfWords.filter((word) => sideOf(word) === side), own) : {});
+    Object.assign(result, findDiburim(columns.filter((_, index) => !labels[index] || labels[index] === commentator).flat(), own));
+    // A column can be labelled wrongly where the two commentaries meet, so what is
+    // missing is also looked for in the other columns, but only as a whole dibur.
+    const missing = own.filter((comment) => !result[comment.ref]);
+    if (missing.length) {
+      const elsewhere = findDiburim(columns.filter((_, index) => labels[index] && labels[index] !== commentator).flat(), missing);
+      Object.entries(elsewhere).filter(([, dibur]) => dibur.whole).forEach(([ref, dibur]) => { result[ref] = dibur; });
+    }
   }
   return result;
 }
@@ -190,8 +223,8 @@ export function findCommentary<T extends { word: string; font?: string; left: nu
 // this sheet has taken, and only accepted when nearly the whole dibur is found,
 // since a short dibur would otherwise match any chance repetition; the printed
 // words must also be hardly more than the dibur's own.
-export function findOverflow<T extends { word: string; font?: string; left: number; width: number }>(pdfWords: T[], taken: Record<string, FoundDibur<T>>, comments: Array<CommentLike & { commentator: string }>, pageCenter: number) {
+export function findOverflow<T extends { word: string; font?: string }>(columns: T[][], labels: Array<string | undefined>, taken: Record<string, FoundDibur<T>>, comments: Array<CommentLike & Commented>) {
   const used = new Set<T>(Object.values(taken).flatMap((dibur) => dibur.words));
-  const found = findCommentary(pdfWords.filter((word) => !used.has(word)), comments.filter((comment) => !taken[comment.ref]), pageCenter);
+  const found = findCommentary(columns.map((column) => column.filter((word) => !used.has(word))), comments.filter((comment) => !taken[comment.ref]), labels);
   return Object.fromEntries(Object.entries(found).filter(([, dibur]) => dibur.share >= .8 && dibur.size >= 3 && dibur.words.length <= dibur.size + 1));
 }

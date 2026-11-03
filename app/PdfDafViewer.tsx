@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { CommentaryLink } from "./bekhorot2aCommentary";
 import { tokenLeft } from "./pdfWordOrder";
-import { addOpeningWords as addDiburOpening, columnOrder, decodeWord, editionWords, findCommentary, findOverflow, normalizeHebrew, sameEditionWord } from "./pdfCommentary";
+import { addOpeningWords as addDiburOpening, decodeWord, editionWords, findCommentary, findOverflow, labelColumns, normalizeHebrew, sameEditionWord, splitColumns } from "./pdfCommentary";
 
 export type DafSegment = { id: string; kind: string; text: string };
 
@@ -277,14 +277,15 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         // words of the Gemara itself, so only that size band is searched.
         // Diburim are also set in a larger bold face (taller than the Gemara, in a
         // font of its own); those words belong to the commentary stream too.
-        const commentaryWords = columnOrder(makeWords((item) => isOnPage(item) && ((item.height >= 9.5 && item.height < gemaraHeight - 1.5) || (item.height > gemaraHeight + .4 && item.height < gemaraHeight + 4.5 && item.fontName !== gemaraFont))), 3.5 * zoom, 7 * zoom);
+        const commentaryColumns = splitColumns(makeWords((item) => isOnPage(item) && ((item.height >= 9.5 && item.height < gemaraHeight - 1.5) || (item.height > gemaraHeight + .4 && item.height < gemaraHeight + 4.5 && item.fontName !== gemaraFont))), 3.5 * zoom, 7 * zoom, makeWords((item) => isOnPage(item) && item.height < 9.5));
         let locatedBlocks: Record<string, LocatedBlock> = {}, locatedCommentary: Record<string, LocatedBlock> = {}, mappingError = "", mappingNotice = "";
         try {
           const alignment = segments.length?alignSefariaToPdf(pdfWords, segments):{blocks:{},warnings:[]};
           locatedBlocks = addOpeningWords(alignment.blocks, openingCandidates, segments, zoom);
           mappingNotice = alignment.warnings.join(" · ");
-          const ownFound = findCommentary(commentaryWords, commentary, viewport.width / 2);
-          const overflow = neighborComments.length ? findOverflow(commentaryWords, ownFound, neighborComments, viewport.width / 2) : {};
+          const labels = labelColumns(commentaryColumns, commentary);
+          const ownFound = findCommentary(commentaryColumns, commentary, labels);
+          const overflow = neighborComments.length ? findOverflow(commentaryColumns, labels, ownFound, neighborComments) : {};
           locatedCommentary = asBlocks(addDiburOpening({ ...ownFound, ...overflow }, makeWords((item) => isOnPage(item)), zoom));
         } catch (reason) {
           mappingError = reason instanceof Error ? reason.message : String(reason);
