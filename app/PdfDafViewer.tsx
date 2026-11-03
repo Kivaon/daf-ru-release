@@ -5,6 +5,7 @@ import { CommentaryLink } from "./bekhorot2aCommentary";
 import { tokenLeft } from "./pdfWordOrder";
 import { addOpeningWords as addDiburOpening, decodeWord, editionWords, normalizeHebrew, sameEditionWord, splitColumns } from "./pdfCommentary";
 import { locateCommentary } from "./pdfLocate";
+import { centerScroll } from "./pdfScroll";
 
 export type DafSegment = { id: string; kind: string; text: string };
 
@@ -196,9 +197,12 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   dataReady?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const centeredFor = useRef("");
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
   const [size, setSize] = useState({ width: 644, height: 993 });
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [readyUrl, setReadyUrl] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [alignmentWarning, setAlignmentWarning] = useState("");
   const [blocks, setBlocks] = useState<Record<string, LocatedBlock>>({});
@@ -321,7 +325,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         const task = page.render({ canvas, canvasContext: context, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] });
         renderTaskRef.current = task; await task.promise;
         void loadingTask?.destroy?.(); loadingTask = undefined;
-        if (!cancelled) { setStatus("ready"); setAlignmentWarning(textLayerError || mappingError || mappingNotice); if (!mappingError) { const available=Object.keys(locatedBlocks); onBlockLocated(locatedBlocks[selectedBlock] ? selectedBlock : (landingEdge==="end" ? available.at(-1) : available[0])); } }
+        if (!cancelled) { setStatus("ready"); setReadyUrl(pdfUrl); setAlignmentWarning(textLayerError || mappingError || mappingNotice); if (!mappingError) { const available=Object.keys(locatedBlocks); onBlockLocated(locatedBlocks[selectedBlock] ? selectedBlock : (landingEdge==="end" ? available.at(-1) : available[0])); } }
       } catch (error) {
         if (!cancelled && (error as { name?: string }).name !== "RenderingCancelledException") {
           console.error("PDF rendering failed", error); setErrorMessage(error instanceof Error ? error.message : String(error)); setStatus("error");
@@ -351,8 +355,22 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     const x = event.clientX - box.left, y = event.clientY - box.top;
     return { x, y, zone: commentaryZones.find((rect) => x >= rect.left - 1 && x <= rect.left + rect.width + 1 && y >= rect.top - 1 && y <= rect.top + rect.height + 1) };
   };
+  // A sheet that has just been opened is shown with the active reply in the middle of the view,
+  // not at the place where the previous sheet was left.
+  useEffect(() => {
+    if (status !== "ready" || readyUrl !== pdfUrl || centeredFor.current === pdfUrl || !stageRef.current) return;
+    const lines = blocks[selectedBlock]?.lines ?? [];
+    centeredFor.current = pdfUrl;
+    const stage = stageRef.current, view = stage.parentElement;
+    if (!view) return;
+    requestAnimationFrame(() => {
+      const stageBox = stage.getBoundingClientRect(), viewBox = view.getBoundingClientRect();
+      const offsetTop = stageBox.top - viewBox.top + view.scrollTop, offsetLeft = stageBox.left - viewBox.left + view.scrollLeft;
+      view.scrollTo(centerScroll({ left: offsetLeft, top: offsetTop, width: stage.offsetWidth }, lines, Object.values(blocks).flatMap((block) => block.lines), { width: view.clientWidth, height: view.clientHeight }));
+    });
+  }, [status, readyUrl, blocks, selectedBlock, pdfUrl]);
   const tractateLabel=label.replace(/\s+\d+[аб]$/,"");
-  return <div className="pdfStage" style={{ width: size.width, height: size.height }}>
+  return <div ref={stageRef} className="pdfStage" style={{ width: size.width, height: size.height }}>
     <canvas ref={canvasRef} aria-label={`Оригинальный PDF, ${label}`} />
     {status === "loading" && <div className="pdfStatus"><div>{dataReady ? "Размечаем лист…" : "Загружаем лист и комментарии Sefaria…"}<small>Подсветка реплик и комментариев появится, когда загрузка закончится.</small></div></div>}
     {status === "error" && <div className="pdfStatus error">Не удалось открыть PDF.<small>{errorMessage}</small><a href={pdfUrl}>Открыть оригинал</a></div>}
