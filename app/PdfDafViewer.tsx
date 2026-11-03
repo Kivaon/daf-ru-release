@@ -190,7 +190,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   zoom: number; selectedBlock: string; onSelect: (blockId: string, word: string) => void; onBlockLocated: (blockId?: string) => void;
   landingEdge?: "start"|"end";
   pdfUrl?: string; label?: string; segments?: DafSegment[]; commentary?: CommentaryLink[];
-  neighborComments?: CommentaryLink[]; onOpenPage?: (pageKey: string) => void;
+  neighborComments?: CommentaryLink[]; onOpenPage?: (pageKey: string, blockId?: string) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
@@ -346,7 +346,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         else setPageTip(null);
       }} onPointerLeave={() => { setHoveredComment(null); setPageTip(null); }} onClick={() => {
         if (!hoveredComment) return;
-        if (neighborRefs.has(hoveredComment)) { const comment = allComments.find((item) => item.ref === hoveredComment); if (comment) onOpenPage?.(comment.base.split(":")[0]); return; }
+        if (neighborRefs.has(hoveredComment)) { const comment = allComments.find((item) => item.ref === hoveredComment); if (comment) onOpenPage?.(comment.base.split(":")[0], comment.base); return; }
         const bases = commentBases[hoveredComment] ?? [];
         const target = bases.includes(selectedBlock) ? undefined : bases.find((base) => blocks[base]);
         if (target) onSelect(target, "");

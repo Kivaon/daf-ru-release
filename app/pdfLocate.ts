@@ -54,7 +54,7 @@ export function locateCommentary<T extends { word: string; font?: string }>(colu
     if (!start || !start.word.font || start.word.font === bodyFont) continue;
     let last = start.index;
     while (last + 1 < start.column.length && last - start.index < BOLD_RUN_LIMIT && start.column[last + 1].font === start.word.font) last++;
-    diburs[comment.ref] = { words: start.column.slice(start.index, last + 1), opening: [], whole: false, share: 0, size: 0 };
+    diburs[comment.ref] = { words: start.column.slice(start.index, last + 1), opening: [], whole: false, share: 0, size: 0, context: 0 };
   }
 
   // comments of the neighbouring sheets: by dibur where it is printed in full,

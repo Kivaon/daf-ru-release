@@ -13,7 +13,7 @@ import BatchEditor from "./BatchEditor";
 import {editorLocation} from "./translationMapModel";
 import AboutProject from "./AboutProject";
 import PrintPage from "./PrintPage";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { PdfDafViewer, DafSegment } from "./PdfDafViewer";
 import { CommentaryLink } from "./bekhorot2aCommentary";
 import { TRACTATES, tractateBySefaria } from "./talmudCatalog";
@@ -90,6 +90,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   const [error, setError] = useState("");
   const [selectedBlock, setSelectedBlock] = useState("2a:3");
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const pendingBlock = useRef<string | null>(null);
   const [blockLocated, setBlockLocated] = useState(false);
   const [zoom, setZoom] = useState(1.5);
   const [dictionaryOpen, setDictionaryOpen] = useState(false);
@@ -168,7 +169,8 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
         setBoundaries({previous,next,joinsPrevious:Boolean(previous&&boundaryContinues(previous,current)),joinsNext:Boolean(next&&boundaryContinues(current,next))});
         const preferred = landingEdge === "end" ? nextSegments.at(-1)?.id : nextSegments[0]?.id;
         const requested=new URLSearchParams(window.location.search).get("ref");
-        setSelectedBlock(nextSegments.some(s=>s.id===requested)?requested!:preferred||"");
+        const wanted=pendingBlock.current;pendingBlock.current=null;
+        setSelectedBlock(wanted&&nextSegments.some(s=>s.id===wanted)?wanted:nextSegments.some(s=>s.id===requested)?requested!:preferred||"");
         setStatus("ready");
       } catch (reason) {
         if (!controller.signal.aborted) { setStatus("error"); setError(reason instanceof Error ? reason.message : String(reason)); }
@@ -210,6 +212,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   const nearbyStart = Math.max(2, Math.min(daf <= 3 ? 2 : daf - 1, Math.max(2, tractate.lastDaf - 2)));
   const nearbyPages = [nearbyStart,nearbyStart+1,nearbyStart+2].filter((number)=>number<=tractate.lastDaf).flatMap((number)=>["a","b"].filter((amud)=>!(number===tractate.lastDaf&&tractate.lastSide==="a"&&amud==="b")).map((amud)=>`${number}${amud}`));
   const neighborComments = useMemo(()=>[...(boundaries.previous?.comments??[]),...(boundaries.next?.comments??[])],[boundaries]);
+  const openComment = (pageKey:string, blockId?:string) => { pendingBlock.current=blockId??null; choosePage(pageKey); };
   const choosePage = (value:string) => { setLandingEdge("start"); setDaf(Number(value.slice(0,-1))); setSide(value.endsWith("b")?"b":"a"); };
   const openUnitPart = (ref:string) => { const key=ref.split(":")[0]; setLandingEdge(key===boundaries.previous?.pageKey?"end":"start");setDaf(Number(key.slice(0,-1)));setSide(key.endsWith("b")?"b":"a"); };
   const selectedIndex=segments.findIndex((item)=>item.id===selectedBlock);
@@ -361,7 +364,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     <header className="topbar"><div className="brand"><span className="brandMark">דף</span><span>Daf-Ru</span></div><div className="account">{user?<><span title={user.email}>{user.name}</span>{user.role==="admin"&&<button className="iconButton" onClick={openUsers}>Пользователи</button>}<a className="accountLink" href={signOutHref} target="_top">Выйти</a></>:<a className="signInButton" href={signInHref} target="_top">Войти</a>}<button className="iconButton" onClick={()=>setDictionaryOpen(true)} aria-label="Открыть словарь">⌘ <span>Словарь</span>{words.length>0&&<b>{words.length}</b>}</button>{canEditArticles&&<a className="mapNavLink" href="/translation-map">Карта перевода</a>}<AboutProject /></div></header>
     <section className="workspace"><aside className="sourcePane dafPane" onPointerDown={()=>setPicked(null)}>
       <nav className="dafNavigation compactNavigation" aria-label="Навигация по Талмуду"><button disabled={isFirst} onClick={()=>move(-1)} aria-label="Предыдущая страница">←</button><label><select value={tractateTitle} aria-label="Трактат" onChange={(e)=>{setLandingEdge("start");setTractateTitle(e.target.value);setDaf(2);setSide("a");}}>{TRACTATES.map((item)=><option key={item.sefaria} value={item.sefaria}>{item.ru}</option>)}</select></label><label><select value={pageKey} aria-label="Страница" onChange={(e)=>choosePage(e.target.value)}>{pageOptions.map((value)=><option key={value} value={value}>{value.replace("a","а").replace("b","б")}</option>)}</select></label><button disabled={isLast} onClick={()=>move(1)} aria-label="Следующая страница">→</button><div className="zoomControls"><button onClick={()=>setZoom(v=>Math.max(.6,v-.15))} aria-label="Уменьшить">−</button><span>{Math.round(zoom*100)}%</span><button onClick={()=>setZoom(v=>Math.min(1.8,v+.15))} aria-label="Увеличить">+</button></div><a className="originalPdfPrint" href={pdfUrl} target="_blank" rel="noopener noreferrer" aria-label="Открыть PDF оригинала страницы для печати" title="Печать оригинала страницы (PDF)"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M6 9V3h12v6M6 18H3v-8h18v8h-3M6 14h12v7H6z"/><path d="M17 11h1"/></svg><span>PDF</span></a></nav>
-      <div className="dafViewport"><PdfDafViewer zoom={zoom} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={status==="ready"?segments:EMPTY_SEGMENTS} commentary={status==="ready"?comments:EMPTY_COMMENTS} neighborComments={status==="ready"?neighborComments:EMPTY_COMMENTS} onOpenPage={choosePage}/></div>
+      <div className="dafViewport"><PdfDafViewer zoom={zoom} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={status==="ready"?segments:EMPTY_SEGMENTS} commentary={status==="ready"?comments:EMPTY_COMMENTS} neighborComments={status==="ready"?neighborComments:EMPTY_COMMENTS} onOpenPage={openComment}/></div>
       <div className="pageGuide compactGuide"><span>Лист: Shas.org / HebrewBooks · текст и связи: Sefaria</span></div>
     </aside><article className="studyPane" onMouseUp={captureSelection}>
       <div className="studyNavigation"><div><span>{tractate.ru}</span><b>{daf}{side==="a"?"а":"б"}</b>{canEditArticles&&<BatchEditor key={`batch-${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} page={pageKey} label={label} autoOpen={prepareTarget===`${tractate.sefaria}|${pageKey}`} ready={status==="ready"&&segments.length>0} onSaved={()=>setArticleRetry(value=>value+1)}/>}<PrintPage key={`${tractate.sefaria}-${pageKey}`} tractate={tractate.sefaria} label={label} segments={segments} context={[...(boundaries.previous?.segments||[]),...segments,...(boundaries.next?.segments||[])]} comments={[...(boundaries.previous?.comments||[]),...comments,...(boundaries.next?.comments||[])]} ready={status==="ready"} /></div><nav aria-label="Соседние страницы">{nearbyPages.map((value)=><button key={value} className={value===pageKey?"active":""} disabled={value===pageKey} onClick={()=>choosePage(value)}>{value.replace("a","а").replace("b","б")}</button>)}</nav></div>

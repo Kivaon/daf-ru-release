@@ -73,3 +73,11 @@ test('of two places for a short dibur, the one followed by the comment\'s own te
  const found=findDiburim(stream,[{ref:'r',dibur:'שנאמר',text:'שנאמר - הקדשתי לי כל בכור'}]);
  assert.equal(found.r.words[0],stream[4]);
 });
+
+test('the Mishnah / Gemara sign before a dibur goes with the dibur',()=>{
+ const found=findDiburim([word('אותו',500,100),word('ולא',478,100),word('בנו',456,100)],[{ref:'r',dibur:'אותו ולא בנו'}]);
+ const sign={...word("מתני'",528,100),height:14};
+ const elsewhere={...word("גמ'",528,300)};
+ const result=addOpeningWords(found,[sign,elsewhere,...found.r.words],1);
+ assert.deepEqual(result.r.map(x=>x.word),["מתני'",'אותו','ולא','בנו']);
+});

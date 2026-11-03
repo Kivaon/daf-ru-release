@@ -69,7 +69,9 @@ export function splitColumns<T extends { left: number; width: number; top: numbe
     for (const word of row) {
       if (filler.has(word)) { bridged = true; continue; }
       const previous = current.at(-1);
-      if (previous && !(bridged && previous.left - (word.left + word.width) <= gap * 7) && previous.left - (word.left + word.width) > gap) { fragments.push({ words: current, left: 0, right: 0 }); current = [word]; } else current.push(word);
+      const span = previous ? previous.left - (word.left + word.width) : 0;
+      const bridge = bridged && span <= gap * 7;
+      if (previous && !bridge && span > gap) { fragments.push({ words: current, left: 0, right: 0 }); current = [word]; } else current.push(word);
       bridged = false;
     }
     if (!current.length) continue;
@@ -103,7 +105,7 @@ export const sameLoosely = (source: string, printed: string) => sameEditionWord(
   || (printed.length > 0 && withoutNun(source).length >= 2 && sameEditionWord(withoutNun(source), withoutNun(printed)))
   || (skeleton(source).length >= 2 && skeleton(source) === skeleton(printed));
 
-export type FoundDibur<T> = { words: T[]; opening: string[]; whole: boolean; share: number; size: number };
+export type FoundDibur<T> = { words: T[]; opening: string[]; whole: boolean; share: number; size: number; context: number };
 
 type Candidate = { first: number; last: number; score: number; matched: number; skipped: number };
 
@@ -218,7 +220,7 @@ export function findDiburim<T extends { word: string; font?: string }>(pdfWords:
     // ends, which may be later than where Sefaria's quotation ends.
     const font = pdfWords[last].font;
     if (font && font !== bodyFont) while (last + 1 < pdfWords.length && last - best.first < 24 && pdfWords[last + 1].font === font) last++;
-    blocks[comment.ref] = { words: pdfWords.slice(best.first, last + 1), opening: words.slice(0, best.skipped).reverse(), whole: best.skipped === 0 && best.matched === words.length, share: best.score / words.length, size: words.length };
+    blocks[comment.ref] = { words: pdfWords.slice(best.first, last + 1), opening: words.slice(0, best.skipped).reverse(), whole: best.skipped === 0 && best.matched === words.length, share: best.score / words.length, size: words.length, context: contextOf(comment, best) };
   });
   return blocks;
 }
@@ -242,6 +244,15 @@ export function addOpeningWords<T extends Placed>(found: Record<string, FoundDib
       if (!next) break;
       words = [next, ...words];
     }
+    // The "מתני" / "גמ" that begins a reply is only a sign for the reader: it goes
+    // with the dibur that follows it and takes that dibur's colour.
+    const first = words[0], line = first.top + first.height;
+    const marker = candidates
+      .filter((candidate) => ["מתני", "גמ"].includes(normalizeHebrew(candidate.word)) && !words.includes(candidate)
+        && Math.abs(candidate.top + candidate.height - line) <= 4 * zoom
+        && candidate.left >= first.left + first.width - 2 * zoom && candidate.left - (first.left + first.width) <= 40 * zoom)
+      .sort((a, b) => a.left - b.left)[0];
+    if (marker) words = [marker, ...words];
     return [ref, words];
   })) as Record<string, T[]>;
 }
@@ -287,11 +298,12 @@ export function findCommentary<T extends { word: string; font?: string }>(column
     const own = comments.filter((comment) => comment.commentator === commentator);
     Object.assign(result, findDiburim(flat.filter((word) => !labelOf(word) || labelOf(word) === commentator), own));
     // A column can be labelled wrongly where the two commentaries meet, so what is
-    // missing is also looked for in the other columns, but only as a whole dibur.
+    // missing is also looked for in the other columns, but only as a whole dibur or
+    // one that is followed by the comment's own text (a quotation is not).
     const missing = own.filter((comment) => !result[comment.ref]);
     if (missing.length) {
       const elsewhere = findDiburim(flat.filter((word) => labelOf(word) && labelOf(word) !== commentator), missing);
-      Object.entries(elsewhere).filter(([, dibur]) => dibur.whole).forEach(([ref, dibur]) => { result[ref] = dibur; });
+      Object.entries(elsewhere).filter(([, dibur]) => dibur.whole || dibur.context >= .5).forEach(([ref, dibur]) => { result[ref] = dibur; });
     }
   }
   return result;
