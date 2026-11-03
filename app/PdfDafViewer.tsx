@@ -5,6 +5,7 @@ import { CommentaryLink } from "./bekhorot2aCommentary";
 import { tokenLeft } from "./pdfWordOrder";
 import { addOpeningWords as addDiburOpening, decodeWord, editionWords, normalizeHebrew, sameEditionWord, splitColumns } from "./pdfCommentary";
 import { locateCommentary } from "./pdfLocate";
+import { beginningPlace, sheetLabel } from "./pdfJump";
 import { centerScroll } from "./pdfScroll";
 import { commentarySizes, sizeOf } from "./pdfSizes";
 
@@ -411,12 +412,13 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
       }} />
       {pageTip && <div className="pageTip" style={{ left: pageTip.x, top: pageTip.y }}>{pageTip.text}</div>}
       {jump && (() => {
-        const { comment } = jump, pageKey = comment.base.split(":")[0], sheet = pageKey.replace(/a$/, "а").replace(/b$/, "б");
+        const { comment } = jump, pageKey = comment.base.split(":")[0], sheet = sheetLabel(pageKey);
         const who = comment.commentator === "Rashi" ? "Раши" : "Тосафот";
-        return <div className={`jumpNote ${comment.commentator === "Rashi" ? "jumpRashi" : "jumpTosafot"}`} role="dialog" aria-label={`${who}: комментарий к листу ${sheet}`} style={{ left: Math.max(8, Math.min(jump.x, size.width - 268)), top: Math.max(8, Math.min(jump.y + 14, size.height - 215)) }}>
-          <small>{who} · к листу {sheet}</small>
-          <span className="jumpDibur" lang="he" dir="rtl">{comment.dibur}</span>
-          <p>Этот комментарий напечатан здесь, но объясняет реплику на другом листе.</p>
+        const here = new URL(pdfUrl, "http://x").searchParams;
+        const where = beginningPlace(pageKey, `${here.get("daf")}${here.get("amud")}`);
+        return <div className={`jumpNote ${comment.commentator === "Rashi" ? "jumpRashi" : "jumpTosafot"}`} role="dialog" aria-label={`${who}: комментарий, начало ${where}`} style={{ left: Math.max(8, Math.min(jump.x, size.width - 268)), top: Math.max(8, Math.min(jump.y + 14, size.height - 170)) }}>
+          <small>{who} · лист {sheet}</small>
+          <p>Этот комментарий является продолжением, начало находится {where}.</p>
           <div className="jumpActions"><button className="jumpGo" onClick={() => { setJump(null); onOpenPage?.(pageKey, comment.base); }}>Перейти к {sheet}</button><button className="jumpStay" onClick={() => setJump(null)}>Остаться</button></div>
         </div>;
       })()}
