@@ -142,3 +142,9 @@
  .compactGuide{display:block}
  .panZoomContent .pageTip,.panZoomContent .jumpNote{transform:scale(calc(1 / var(--sheet-scale,1)));transform-origin:0 0}
 }
+
+/* диагностическая панель (только при ?debug=1) */
+.debugPanel{position:fixed;left:0;right:0;bottom:0;z-index:100;background:#111;color:#e8e8e8;font:12px/1.4 ui-monospace,Menlo,monospace;box-shadow:0 -2px 12px rgba(0,0,0,.4)}
+.debugBar{display:flex;gap:8px;align-items:center;padding:6px 10px}
+.debugBar button{font:inherit;padding:4px 10px;border-radius:6px;border:1px solid #666;background:#222;color:#fff}
+.debugPanel textarea{display:block;width:100%;height:45vh;box-sizing:border-box;background:#000;color:#9f9;border:0;padding:8px 10px;font:inherit;resize:none}
