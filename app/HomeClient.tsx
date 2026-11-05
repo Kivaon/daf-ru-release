@@ -375,22 +375,23 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     query.addEventListener("change", apply);
     return () => query.removeEventListener("change", apply);
   }, []);
+  // the header hides on scroll on phones: portrait (narrow) and landscape (touch screen, low height)
   useEffect(() => {
-    if (!isMobile) setHeaderHidden(false);
-  }, [isMobile]);
-  // the header goes away when the page is scrolled down and comes back when it is scrolled up
-  useEffect(() => {
-    if (!isMobile) return;
+    const query = window.matchMedia("(max-width: 640px), (pointer: coarse) and (max-height: 500px)");
     let last = window.scrollY;
     const onScroll = () => {
+      if (!query.matches) return;
       const now = window.scrollY;
       if (now > last + 8 && now > 90) setHeaderHidden(true);
       else if (now < last - 8 || now <= 90) setHeaderHidden(false);
       last = now;
     };
+    const onChange = () => { if (!query.matches) setHeaderHidden(false); };
+    onChange();
+    query.addEventListener("change", onChange);
     window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, [isMobile]);
+    return () => { query.removeEventListener("change", onChange); window.removeEventListener("scroll", onScroll); };
+  }, []);
   // the "О проекте" window lives inside the menu, which therefore stays open until that window is closed
   useEffect(() => {
     if (!menuOpen) return;
