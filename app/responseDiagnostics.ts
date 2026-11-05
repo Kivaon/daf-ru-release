@@ -6,9 +6,10 @@ export function readModelResponse(text:string){
  try {value=parseModelResponse(text,recovered=>{recoveredText=recovered;});}
  catch {
   let candidate=text;
-  try {candidate=recoverResponseSyntax(text);} catch { /* diagnose original malformed quotes */ }
+  let quotesUnmatched=false;
+  try {candidate=recoverResponseSyntax(text);} catch { quotesUnmatched=/[“”„]/.test(text); /* diagnose original malformed quotes */ }
   const repair=suggestClosingBrackets(candidate);
-  if(!repair)throw new Error(diagnoseResponse(candidate));
+  if(!repair)throw new Error((quotesUnmatched?'Не удалось сопоставить типографские кавычки “ ” „ в ответе: возможно, ответ оборван или какая-то кавычка не закрыта. ':'')+diagnoseResponse(candidate));
   value=JSON.parse(repair.text);suffix=repair.suffix;
   if(candidate!==text)recoveredText=repair.text;
  }

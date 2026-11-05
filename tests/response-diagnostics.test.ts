@@ -53,3 +53,20 @@ test('invisible syntax characters report code and position but remain legal insi
 test('ambiguous quotation, prose, escapes, truncation and multiple fences stay rejected',()=>{
  for(const raw of ['Вот JSON:\n{"title":"x"}','```json\n{}\n```\n```json\n{}\n```','{"title”:"x”}','{„title“:„x“}','{"title":"a\\q"}','{"title":"a\nb"}','{“title”:“обрыв','{"title":"x",}'])assert.throws(()=>readModelResponse(raw));
 });
+
+test('quotations set low („…“ or „…”) inside a text with typographic quotes do not end the text',()=>{
+ const text='{“title”:“Тема”,“translation”:“Как сказано: „Говори сынам Израиля, и пусть они сделают себе цицит“ (Бемидбар 15:2). И ещё „так”, и так.”,“rashi”:[],“tosafot”:[{“ref”:“Tosafot on Menachot 42a:14:1”,“translation”:”«Откуда известно?» — Отсюда.“,“explanation”:“Правило „применяется“, но не здесь.”}]}';
+ const parsed=readModelResponse(text);const value=parsed.value as {translation:string;rashi:unknown[];tosafot:{ref:string;translation:string;explanation:string}[]};
+ assert.equal(parsed.suffix,'');
+ assert.ok(value.translation.includes('„Говори сынам Израиля, и пусть они сделают себе цицит“ (Бемидбар 15:2).'));
+ assert.ok(value.translation.includes('„так”, и так.'));
+ assert.deepEqual(value.rashi,[]);
+ assert.equal(value.tosafot.length,1);
+ assert.equal(value.tosafot[0].ref,'Tosafot on Menachot 42a:14:1');
+ assert.equal(value.tosafot[0].translation,'«Откуда известно?» — Отсюда.');
+ assert.equal(value.tosafot[0].explanation,'Правило „применяется“, но не здесь.');
+});
+
+test('a quotation opened low and never closed is reported, not guessed',()=>{
+ assert.throws(()=>readModelResponse('{“title”:“Тема „без конца”}'));
+});

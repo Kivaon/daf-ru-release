@@ -22,7 +22,8 @@ export function recoverResponseSyntax(input:string):string {
     const fence=text.trim().match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
     if(fence && !fence[1].includes('```')) text=fence[1];
     let mode: "outside" | "ascii" | "smart" = "outside";
-    let depth = 0;
+    // typographic quotations inside a token: „…“ and „…” (Russian and Polish, opened low), “…” (opened high)
+    const inner: string[] = [];
     let recovered = "";
     for (let i = 0; i < text.length; i++) {
       const char = text[i];
@@ -40,20 +41,20 @@ export function recoverResponseSyntax(input:string):string {
         }
       } else if (mode === "ascii") {
         if (char === '"') mode = "outside";
-      } else if (char === "“" || char === "”") {
+      } else if (char === "“" || char === "”" || char === "„") {
         // Either smart glyph may close a JSON token, but only at a JSON
-        // boundary. Balanced typographic quotations inside the token remain text.
+        // boundary. Typographic quotations inside the token remain text.
         const following=text.slice(i+1).match(/^\s*(.)/)?.[1];
         const boundary=following===undefined||':,}]'.includes(following);
-        if ((char === "“" || char === "”") && depth===0 && boundary) {
-          mode="outside";recovered+='"';continue;
-        }
-        if (char === "“") depth++;
-        if (char === "”" && depth>0) depth--;
+        if (char === "„") inner.push("„");
+        else if (inner.at(-1) === "„") inner.pop();
+        else if (!inner.length && boundary) { mode="outside";recovered+='"';continue; }
+        else if (char === "“") inner.push("“");
+        else if (inner.length) inner.pop();
       }
       recovered += char;
     }
-    if (mode !== "outside" || depth !== 0) throw new SyntaxError("Unclosed quotation");
+    if (mode !== "outside" || inner.length) throw new SyntaxError("Unclosed quotation");
     return recovered;
 }
 
