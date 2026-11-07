@@ -70,3 +70,11 @@ test('quotations set low („…“ or „…”) inside a text with typographic
 test('a quotation opened low and never closed is reported, not guessed',()=>{
  assert.throws(()=>readModelResponse('{“title”:“Тема „без конца”}'));
 });
+
+test('copy artefacts: trailing backslashes and &#x20; at line starts are removed', () => {
+ const text = '{\\\n&#x20; "title": "Йома — тема",\\\n&#x20; "translation": "Он сказал: „нет“ («да»).",\\\n&#x20; "rashi": [\\\n&#x20;   {\\\n&#x20;     "ref": "Rashi on Yoma 20b:10:1",\\\n&#x20;     "translation": "Текст"\\\n&#x20;   }\\\n&#x20; ],\\\n&#x20; "tosafot": []\\\n}';
+ const parsed = readModelResponse(text) as { value: { title: string; rashi: { ref: string }[]; tosafot: unknown[] } };
+ assert.equal(parsed.value.title, 'Йома — тема');
+ assert.equal(parsed.value.rashi[0].ref, 'Rashi on Yoma 20b:10:1');
+ assert.deepEqual(parsed.value.tosafot, []);
+});

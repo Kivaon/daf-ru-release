@@ -21,6 +21,11 @@ export function recoverResponseSyntax(input:string):string {
     let text=input.replace(/^\uFEFF/, '');
     const fence=text.trim().match(/^```(?:json)?[ \t]*\r?\n([\s\S]*?)\r?\n```$/i);
     if(fence && !fence[1].includes('```')) text=fence[1];
+    // copy artefacts of some chat pages: a "\" at the end of a line after a structural character
+    // and space entities (&#x20;, &nbsp;) at the start of a line; only the framing is touched
+    text=text
+      .replace(/([{\[,\]}"])[ \t]*\\[ \t]*(\r?\n)/g, "$1$2")
+      .replace(/^([ \t]*)((?:&#x20;|&#32;|&nbsp;|&#160;|&#xA0;)+)/gim, (_m, lead: string, ents: string) => lead + " ".repeat((ents.match(/&/g) || []).length));
     let mode: "outside" | "ascii" | "smart" = "outside";
     // typographic quotations inside a token: „…“ and „…” (Russian and Polish, opened low), “…” (opened high)
     const inner: string[] = [];
