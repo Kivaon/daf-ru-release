@@ -19,7 +19,13 @@ const parts = (value:unknown):Part[] => Array.isArray(value) ? value.slice(0,4).
 }) : [];
 
 export async function GET(request:Request) {
-  const url=new URL(request.url), tractate=text(url.searchParams.get("tractate"),100), ref=text(url.searchParams.get("ref"),100);
+  const url=new URL(request.url), tractate=text(url.searchParams.get("tractate"),100), ref=text(url.searchParams.get("ref"),100), page=text(url.searchParams.get("page"),10);
+  // Только чтение: переводы всех реплик одной стороны листа для режима «Весь лист» (без комментариев).
+  if(tractate&&page&&!ref){
+    if(!/^\d{1,3}[ab]$/.test(page)) return Response.json({error:"Неверная сторона листа"},{status:400});
+    const rows=await env.DB.prepare("SELECT ref, title, translation, explanation, unit_ref, parts_json FROM articles WHERE tractate = ? AND ref LIKE ? ORDER BY ref").bind(tractate,`${page}:%`).all<Record<string,string>>();
+    return Response.json({articles:rows.results.map((row)=>({ref:row.ref,title:row.title,translation:row.translation,explanation:row.explanation,unitRef:row.unit_ref||undefined,parts:JSON.parse(row.parts_json||"[]")}))});
+  }
   if(!tractate||!ref) return Response.json({error:"Не указана реплика"},{status:400});
   const row=await env.DB.prepare("SELECT ref, title, translation, explanation, unit_ref, parts_json, rashi_json, tosafot_json, provider, created_at, updated_at FROM articles WHERE tractate = ? AND ref = ?").bind(tractate,ref).first<Record<string,string>>();
   if(!row) return Response.json({article:null});
