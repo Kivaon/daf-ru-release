@@ -148,3 +148,34 @@
 .debugBar{display:flex;gap:8px;align-items:center;padding:6px 10px}
 .debugBar button{font:inherit;padding:4px 10px;border-radius:6px;border:1px solid #666;background:#222;color:#fff}
 .debugPanel textarea{display:block;width:100%;height:45vh;box-sizing:border-box;background:#000;color:#9f9;border:0;padding:8px 10px;font:inherit;resize:none}
+
+/* ===== Настройки показа статьи и режим «Весь лист» (тестовая ветка test-vocalized) ===== */
+.viewSettings{position:relative;display:inline-block;margin-left:6px}
+.viewSettingsButton{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 10px;border:1px solid #c6cec8;border-radius:6px;background:transparent;color:#496b5b;font:13px Inter,system-ui,sans-serif;cursor:pointer}
+.viewSettingsButton:hover,.viewSettingsButton[aria-expanded="true"]{background:#e8eee8;border-color:#8b9e91}
+.viewSettingsPanel{position:absolute;z-index:30;top:38px;left:0;width:min(320px,calc(100vw - 32px));padding:12px 14px;border:1px solid #c9cdc2;border-radius:10px;background:#fbfaf6;box-shadow:0 10px 30px rgba(23,52,46,.18);font:13px Inter,system-ui,sans-serif;color:#17342e}
+.viewSettingsPanel fieldset{margin:0 0 10px;padding:0;border:0}
+.viewSettingsPanel legend{padding:0;margin-bottom:5px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#6b7d73}
+.viewSettingsPanel label{display:flex;align-items:center;gap:8px;padding:3px 0;cursor:pointer}
+.viewSettingsPanel input[disabled]+*,.viewSettingsPanel label:has(input[disabled]){opacity:.55;cursor:default}
+.viewSettingsPanel small{color:#7d8c84}
+.viewSettingsPanel .viewHint{margin:6px 0 0;font-size:12px;line-height:1.4;color:#5e6d67}
+.viewPresets{display:flex;flex-wrap:wrap;gap:6px}
+.viewPresets button{padding:5px 9px;border:1px solid #c6cec8;border-radius:999px;background:transparent;color:#315f51;font:12px Inter,system-ui,sans-serif;cursor:pointer}
+.viewPresets button:hover{background:#e8eee8}
+.viewPresets button.active{background:#315f51;border-color:#315f51;color:#fff}
+.pageFlow{margin:0 0 18px;padding:16px 18px;border:1px solid #d8d6cb;border-radius:10px;background:#fbfaf6}
+.pageFlowHead{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;font:12px Inter,system-ui,sans-serif;color:#6b7d73}
+.pageFlowHead b{font-size:13px;color:#17342e}
+.pageFlowHead i{margin-left:auto;font-style:normal}
+.pageFlowText{margin:0;font:16px/1.7 Georgia,'Times New Roman',serif;color:#22352f}
+.pageFlowNote{margin:0;font:13px Inter,system-ui,sans-serif;color:#6b7d73}
+.flowItem{padding:1px 2px;border-radius:4px;cursor:pointer;transition:background .12s}
+.flowItem sup{margin-right:3px;font:600 10px Inter,system-ui,sans-serif;color:#a07a3a}
+.flowItem:hover{background:#efeadb}
+.flowItem:focus-visible{outline:2px solid #31715d;outline-offset:1px}
+.flowItem.selected{background:#f3e3b6;box-shadow:0 0 0 2px #f3e3b6}
+.flowItem.untranslated{color:#8a958f}
+.flowItem .flowOriginal{font:15px/1.6 'Frank Ruhl Libre','Times New Roman',serif}
+.flowItem small{font:11px Inter,system-ui,sans-serif;color:#9aa49e}
+@media(max-width:640px){.viewSettingsPanel{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100dvh - 90px);overflow:auto}}
