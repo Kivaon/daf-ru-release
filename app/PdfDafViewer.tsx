@@ -220,6 +220,11 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const stageRef = useRef<HTMLDivElement>(null);
   const centeredFor = useRef("");
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
+  // The alignment of the Gemara with the sheet (about a second) does not depend on the comments: when only the comments of
+  // the neighbouring sheets arrive later, the sheet is marked again from this kept result.
+  const alignCache = useRef<{ pdfUrl: string; zoom: number; segments: DafSegment[]; alignment: ReturnType<typeof alignSefariaToPdf> } | null>(null);
+  // the sheet already drawn (url and zoom): drawing it again with more comments must not blink the loading veil
+  const drawnKey = useRef("");
   const [size, setSize] = useState({ width: 644, height: 993 });
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [readyUrl, setReadyUrl] = useState("");
@@ -241,14 +246,14 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     if (!pdfWorkerWarmed) { pdfWorkerWarmed = true; void fetch("/pdf.worker.min.js?v=3", { cache: "force-cache" }).catch(() => undefined); }
   }, [pdfUrl]);
   useEffect(() => {
-    if (!dataReady) { setStatus("loading"); return; }
+    if (!dataReady) { drawnKey.current = ""; setStatus("loading"); return; }
     let cancelled = false;
     // every opened document starts its own worker thread; it is closed as soon as the
     // sheet is drawn (or abandoned), otherwise the workers pile up while pages are turned
     let loadingTask: { destroy?: () => unknown } | undefined;
     async function renderPdf() {
       try {
-        setStatus("loading"); setErrorMessage(""); setAlignmentWarning("");
+        if (drawnKey.current !== `${pdfUrl}|${zoom}`) { setStatus("loading"); setErrorMessage(""); setAlignmentWarning(""); }
         const [pdfjsApi, bytes] = await Promise.all([loadPdfJs(), pdfFile(pdfUrl)]);
         pdfjsApi.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js?v=3";
         // PDF.js hands the buffer over to its worker, so each document gets a copy of the kept one
@@ -330,7 +335,10 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         const commentaryColumns = splitColumns(makeWords((item) => isOnPage(item) && (isCommentarySize(item) || (item.height > gemaraHeight + .4 && item.height < gemaraHeight + 4.5 && item.fontName !== gemaraFont))), 3.5 * zoom, 7 * zoom, makeWords((item) => isOnPage(item) && item.height < 9.5 && !isCommentarySize(item)));
         let locatedBlocks: Record<string, LocatedBlock> = {}, locatedCommentary: Record<string, LocatedBlock> = {}, locatedZones: Array<TextRect & { ref: string }> = [], mappingError = "", mappingNotice = "";
         try {
-          const alignment = segments.length?alignSefariaToPdf(pdfWords, segments):{blocks:{},warnings:[]};
+          const kept = alignCache.current;
+          const alignment = !segments.length ? { blocks: {}, warnings: [] } as ReturnType<typeof alignSefariaToPdf>
+            : kept && kept.pdfUrl === pdfUrl && kept.zoom === zoom && kept.segments === segments ? kept.alignment : alignSefariaToPdf(pdfWords, segments);
+          if (segments.length) alignCache.current = { pdfUrl, zoom, segments, alignment };
           locatedBlocks = addOpeningWords(alignment.blocks, openingCandidates, segments, zoom);
           mappingNotice = alignment.warnings.join(" · ");
           const located = locateCommentary(commentaryColumns, commentary, neighborComments);
@@ -359,7 +367,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         const task = page.render({ canvas, canvasContext: context, viewport, transform: ratio === 1 ? undefined : [ratio, 0, 0, ratio, 0, 0] });
         renderTaskRef.current = task; await task.promise;
         void loadingTask?.destroy?.(); loadingTask = undefined;
-        if (!cancelled) { setStatus("ready"); setReadyUrl(pdfUrl); setAlignmentWarning(textLayerError || mappingError || mappingNotice); if (!mappingError) { const available=Object.keys(locatedBlocks); onBlockLocated(locatedBlocks[selectedBlock] ? selectedBlock : (landingEdge==="end" ? available.at(-1) : available[0])); } }
+        if (!cancelled) { drawnKey.current = `${pdfUrl}|${zoom}`; setStatus("ready"); setReadyUrl(pdfUrl); setAlignmentWarning(textLayerError || mappingError || mappingNotice); if (!mappingError) { const available=Object.keys(locatedBlocks); onBlockLocated(locatedBlocks[selectedBlock] ? selectedBlock : (landingEdge==="end" ? available.at(-1) : available[0])); } }
       } catch (error) {
         if (!cancelled && (error as { name?: string }).name !== "RenderingCancelledException") {
           console.error("PDF rendering failed", error); setErrorMessage(error instanceof Error ? error.message : String(error)); setStatus("error");
