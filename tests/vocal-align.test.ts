@@ -81,3 +81,26 @@ test('a side that was already aligned is taken from memory, a changed text is al
   assert.notEqual(second, first);
   assert.equal(alignFromFile(file, '2a', changed), second);
 });
+
+import { existsSync } from 'node:fs';
+import { TRACTATES } from '../app/talmudCatalog.ts';
+
+const sideNumber = (side: string) => Number(side.slice(0, -1)) * 2 + (side.endsWith('b') ? 1 : 0);
+
+test('every tractate of the catalog has a word file, except those Dicta does not have', () => {
+  const missing: string[] = [];
+  for (const tractate of TRACTATES) {
+    const path = `../public/vocal/words/${tractate.sefaria.replace(/ /g, '_')}.json`;
+    if (!existsSync(new URL(path, import.meta.url))) { missing.push(tractate.sefaria); continue; }
+    const file = read(path);
+    assert.ok(isWordsFile(file), tractate.sefaria);
+    assert.equal(file.tractate, tractate.sefaria);
+    // стороны идут по порядку листов, без повторов, и начинаются с 2a (в Талмуде первые два листа нумерации нет)
+    const numbers = file.order.map(sideNumber);
+    assert.deepEqual(numbers, [...numbers].sort((a, b) => a - b), tractate.sefaria);
+    assert.equal(new Set(numbers).size, numbers.length, tractate.sefaria);
+    assert.ok(file.order.length > 20 && file.order.reduce((sum: number, key: string) => sum + file.sides[key].length, 0) > 5000, tractate.sefaria);
+    assert.match(file.dicta.credit, /Dicta/);
+  }
+  assert.deepEqual(missing, ['Shekalim']);
+});

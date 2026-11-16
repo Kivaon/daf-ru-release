@@ -231,14 +231,16 @@ const CACHE_LIMIT = 60;
 const aligned = new Map<string, VocalSide>();
 
 const wordsRequests = new Map<string, Promise<WordsFile | null>>();
-/** Файл слов трактата; запрос выполняется один раз за открытую страницу, неудача даёт null (тогда прежний текст). */
-export function loadWordsFile(tractate: string, fetcher: typeof fetch = fetch): Promise<WordsFile | null> {
+/** Файл слов трактата; запрос выполняется один раз за открытую страницу, неудача или долгое ожидание (6 с) дают null (тогда прежний текст). */
+export function loadWordsFile(tractate: string, fetcher: typeof fetch = fetch, timeoutMs = 6000): Promise<WordsFile | null> {
   let request = wordsRequests.get(tractate);
   if (!request) {
-    request = fetcher(`/vocal/words/${encodeURIComponent(tractate)}.json`)
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    request = fetcher(`/vocal/words/${encodeURIComponent(tractate.replace(/ /g, "_"))}.json`, { signal: controller.signal })
       .then((response) => (response.ok ? response.json() : null))
       .catch(() => null)
-      .then((data) => (isWordsFile(data) ? data : null));
+      .then((data) => { clearTimeout(timer); return isWordsFile(data) ? data : null; });
     wordsRequests.set(tractate, request);
   }
   return request;

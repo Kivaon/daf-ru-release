@@ -5,9 +5,11 @@
 Приложение само сопоставляет эти слова с живым текстом Sefaria (app/vocalAlign.ts), поэтому файлам Sefaria не нужен.
 Метки «גמ'/מתני'» отдельных строк в слова не входят, границы сторон сохраняются.
 
-  python3 scripts/build-vocal-words.py --dicta-dir DIR --out public/vocal/words --commit <sha> Berakhot Bekhorot Pesachim
+  python3 scripts/build-vocal-words.py --dicta-dir DIR --out public/vocal/words --commit <sha> Berakhot Avoda_Zara="Avodah Zarah" ...
 
-DIR — папка с файлами «<Трактат>.txt» (содержимое «<трактат>.combinedfullmaleh.txt» из репозитория Dicta).
+DIR — папка с файлами «<Имя у Dicta>.txt» (содержимое «<трактат>.combinedfullmaleh.txt» из репозитория Dicta).
+Аргумент «Имя_у_Dicta=Имя в Sefaria» нужен, если названия различаются; файл называется по имени в Sefaria с «_» вместо пробела
+(так его ищет приложение). Без «=» имя берётся одно и то же.
 """
 import argparse
 import importlib.util
@@ -45,10 +47,12 @@ def main():
     parser.add_argument("tractates", nargs="+")
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
-    for tractate in args.tractates:
-        with open(os.path.join(args.dicta_dir, f"{tractate}.txt"), encoding="utf-8") as handle:
+    for item in args.tractates:
+        source, _, tractate = item.partition("=")
+        tractate = tractate or source
+        with open(os.path.join(args.dicta_dir, f"{source}.txt"), encoding="utf-8") as handle:
             document = build(tractate, handle.read(), args.commit)
-        path = os.path.join(args.out, f"{tractate}.json")
+        path = os.path.join(args.out, f"{tractate.replace(' ', '_')}.json")
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(document, handle, ensure_ascii=False, separators=(",", ":"))
         words = sum(len(w) for w in document["sides"].values())
