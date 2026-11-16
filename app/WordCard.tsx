@@ -22,7 +22,8 @@ type Props = {
   status: string;
   loading: boolean;
   saved: boolean;
-  onSave: (word: string) => void;
+  /** Без обработчика кнопка «В мою коллекцию» не показывается (личный словарь пока выключен). */
+  onSave?: (word: string) => void;
   onClose: () => void;
 };
 
@@ -72,7 +73,7 @@ export default function WordCard({ card, status, loading, saved, onSave, onClose
         </section>;
       })}
     <div className="wordCardFoot">
-      <button type="button" disabled={saved} onClick={() => onSave(card.word)}>{saved ? "В коллекции" : "＋ В мою коллекцию"}</button>
+      {onSave && <button type="button" disabled={saved} onClick={() => onSave(card.word)}>{saved ? "В коллекции" : "＋ В мою коллекцию"}</button>}
       <small>{status}</small>
     </div>
   </div>;
