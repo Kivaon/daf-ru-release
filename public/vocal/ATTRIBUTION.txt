@@ -1,0 +1,12 @@
+Огласованный текст Гемары (файлы <Трактат>/<сторона>.json в этой папке).
+
+Огласовки: Этот текст Вавилонского Талмуда огласован Dicta, Израильским центром анализа текстов
+(www.dicta.org.il). Источник: https://github.com/Dicta-Israel-Center-for-Text-Analysis/Talmud-Bavli-with-Nikud,
+коммит 8772e90fac22060ea423c168c0f95868653f6ef1, вариант «малэ». Лицензия CC BY-SA.
+This text of the Babylonian Talmud was vocalized by Dicta: The Israel Center for Text Analysis (www.dicta.org.il),
+licensed under CC BY-SA.
+
+Нумерация реплик и границы: Sefaria, версия Wikisource Talmud Bavli, лицензия CC-BY-SA.
+
+Файлы создаёт scripts/build-vocalized.py: слова Dicta сопоставляются со словами реплик Sefaria; тексты не правятся.
+Файлы распространяются на тех же условиях CC BY-SA.

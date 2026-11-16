@@ -179,3 +179,5 @@
 .flowItem .flowOriginal{font:15px/1.6 'Frank Ruhl Libre','Times New Roman',serif}
 .flowItem small{font:11px Inter,system-ui,sans-serif;color:#9aa49e}
 @media(max-width:640px){.viewSettingsPanel{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100dvh - 90px);overflow:auto}}
+.vocalCredit{margin:6px 0 10px;font:11px/1.4 Inter,system-ui,sans-serif;color:#7d8c84}
+.vocalCredit a{color:#496b5b}
