@@ -66,3 +66,22 @@ export function vocalizedSegment(side: VocalSide | null | undefined, ref: string
   if (current.sig !== segment.sig || current.n !== segment.n) return null;
   return segment.w.map(([raw, shown]) => (shown === null ? raw : shown)).filter((word) => word !== "").join(" ");
 }
+
+/**
+ * Огласованные формы слова (по его буквам) на стороне листа: сначала из указанной реплики, затем из остальных.
+ * Нужны, когда слово прочитано с PDF и огласовок у него нет.
+ */
+export function vocalFormsFor(side: VocalSide | null | undefined, wordLetters: string, preferredRef?: string): string[] {
+  if (!side || side.use !== "vocalized" || !wordLetters) return [];
+  const forms: string[] = [];
+  const refs = Object.keys(side.segments);
+  const ordered = preferredRef && side.segments[preferredRef] ? [preferredRef, ...refs.filter((ref) => ref !== preferredRef)] : refs;
+  for (const ref of ordered) {
+    for (const [, shown, type] of side.segments[ref].w) {
+      if (shown === null || shown === "" || (type !== "eq" && type !== "var")) continue;
+      const pure = shown.replace(/[^֑-ׇא-ת]/g, "");
+      if (letters(pure) === wordLetters && !forms.includes(pure)) forms.push(pure);
+    }
+  }
+  return forms;
+}

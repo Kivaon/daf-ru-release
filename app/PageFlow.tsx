@@ -24,7 +24,7 @@ export default function PageFlow({ label, items, ready, error, onSelect }: Props
       : <p className="pageFlowText">{items.map((item) => {
         const pick = () => onSelect(item.ref);
         const key = (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); pick(); } };
-        return <span key={item.ref} ref={item.selected ? selected : undefined} role="button" tabIndex={0} aria-pressed={item.selected} aria-label={`Реплика ${item.number}`} className={`flowItem${item.selected ? " selected" : ""}${item.translation === null ? " untranslated" : ""}`} onClick={pick} onKeyDown={key}>
+        return <span key={item.ref} data-ref={item.ref} ref={item.selected ? selected : undefined} role="button" tabIndex={0} aria-pressed={item.selected} aria-label={`Реплика ${item.number}`} className={`flowItem${item.selected ? " selected" : ""}${item.translation === null ? " untranslated" : ""}`} onClick={pick} onKeyDown={key}>
           <sup>{item.number}</sup>
           {item.translation ?? <>
             <bdi lang="he" dir="rtl" className="flowOriginal">{item.original}</bdi> <small>нет перевода</small>

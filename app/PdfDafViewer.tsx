@@ -189,7 +189,9 @@ function addOpeningWords(blocks:Record<string,LocatedBlock>, candidates:WordRect
   return result;
 }
 
-export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [], neighborComments = [], onOpenPage, dataReady = true, onFocus }: {
+export type PdfWordHit = { word: string; blockId?: string; box: TextRect };
+
+export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSelect, onBlockLocated, pdfUrl = "/bekhorot-2a.pdf", label = "Бехорот 2а", segments = [], commentary = [], neighborComments = [], onOpenPage, dataReady = true, onFocus, onWordClick }: {
   zoom: number; selectedBlock: string; onSelect: (blockId: string, word: string) => void; onBlockLocated: (blockId?: string) => void;
   landingEdge?: "start"|"end";
   pdfUrl?: string; label?: string; segments?: DafSegment[]; commentary?: CommentaryLink[];
@@ -199,6 +201,8 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   dataReady?: boolean;
   // inside a frame that moves the sheet itself the view is not scrolled: the frame is told where the active reply is
   onFocus?: (box: TextRect) => void;
+  // a click on a word of the selected reply (or of a comment linked to it), or an Alt/Option-click on any word, asks for its dictionary entry
+  onWordClick?: (hit: PdfWordHit) => void;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -210,6 +214,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   const [errorMessage, setErrorMessage] = useState("");
   const [alignmentWarning, setAlignmentWarning] = useState("");
   const [blocks, setBlocks] = useState<Record<string, LocatedBlock>>({});
+  const [pageWords, setPageWords] = useState<WordRect[]>([]);
   const [commentaryBlocks, setCommentaryBlocks] = useState<Record<string, LocatedBlock>>({});
   const [commentaryZones, setCommentaryZones] = useState<Array<TextRect & { ref: string }>>([]);
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
@@ -329,7 +334,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         const ratio = Math.min(window.devicePixelRatio || 1, 2);
         canvas.width = Math.floor(viewport.width * ratio); canvas.height = Math.floor(viewport.height * ratio);
         canvas.style.width = `${viewport.width}px`; canvas.style.height = `${viewport.height}px`;
-        setSize({ width: viewport.width, height: viewport.height }); setBlocks(locatedBlocks); setCommentaryBlocks(locatedCommentary); setCommentaryZones(commentAreas(locatedZones, 3.5 * zoom, 30 * zoom));
+        setSize({ width: viewport.width, height: viewport.height }); setPageWords(makeWords((item) => isOnPage(item))); setBlocks(locatedBlocks); setCommentaryBlocks(locatedCommentary); setCommentaryZones(commentAreas(locatedZones, 3.5 * zoom, 30 * zoom));
         renderTaskRef.current?.cancel();
         const context = canvas.getContext("2d", { alpha: false });
         if (!context) throw new Error("Canvas unavailable");
@@ -367,6 +372,14 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     window.addEventListener("keydown", close);
     return () => window.removeEventListener("keydown", close);
   }, [jump]);
+  // dictionary click: the word's box is given in screen coordinates (inside a frame that enlarges the sheet it is scaled)
+  const openWord = (rect: WordRect, blockId?: string) => {
+    const stage = stageRef.current;
+    if (!stage || !onWordClick) return;
+    const box = stage.getBoundingClientRect(), scale = box.width / (stage.offsetWidth || box.width) || 1;
+    onWordClick({ word: rect.word, blockId, box: { left: box.left + rect.left * scale, top: box.top + rect.top * scale, width: rect.width * scale, height: rect.height * scale } });
+  };
+  const wordAt = (x: number, y: number) => pageWords.find((word) => x >= word.left - 1 && x <= word.left + word.width + 1 && y >= word.top - 1 && y <= word.top + word.height + 1);
   const zoneAt = (event: { clientX: number; clientY: number; currentTarget: HTMLElement }) => {
     const box = event.currentTarget.getBoundingClientRect();
     // inside a frame that enlarges the sheet the screen and the sheet are not the same size
@@ -413,7 +426,10 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
         else setPageTip(null);
       }} onPointerLeave={() => { setHoveredComment(null); setPageTip(null); }} onClick={(event) => {
         // the place is taken from the click itself: a finger moves nothing before it touches
-        const ref = zoneAt(event).zone?.ref;
+        const at = zoneAt(event), ref = at.zone?.ref;
+        // a word of a comment linked to the selected reply (or any word with Alt/Option) opens its dictionary entry
+        const hitWord = onWordClick ? wordAt(at.x, at.y) : undefined;
+        if (hitWord && (event.altKey || (ref && linkedRefs.has(ref)))) { setJump(null); openWord(hitWord); return; }
         if (!ref) return;
         setJump(null);
         if (neighborRefs.has(ref)) { const comment = allComments.find((item) => item.ref === ref); const at = zoneAt(event); if (comment) setJump({ x: at.x, y: at.y, scale: at.scale, comment }); return; }
@@ -433,7 +449,7 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
           <div className="jumpActions"><button className="jumpGo" onClick={() => { setJump(null); onOpenPage?.(pageKey, comment.base); }}>Перейти к {sheet}</button><button className="jumpStay" onClick={() => setJump(null)}>Остаться</button></div>
         </div>;
       })()}
-      {Object.entries(blocks).flatMap(([blockId, block]) => block.words.map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={() => blockId !== selectedBlock && onSelect(blockId, rect.word)} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
+      {Object.entries(blocks).flatMap(([blockId, block]) => block.words.map((rect, index) => <button key={`${blockId}-${index}`} className="wordHit" style={{ left: rect.left, top: rect.top, width: rect.width, height: rect.height }} onPointerEnter={() => setHoveredBlock(blockId)} onPointerLeave={() => setHoveredBlock(null)} onFocus={() => setHoveredBlock(blockId)} onBlur={() => setHoveredBlock(null)} onClick={(event) => { if (onWordClick && (blockId === selectedBlock || event.altKey)) { openWord(rect, blockId); return; } if (blockId !== selectedBlock) onSelect(blockId, rect.word); }} aria-label={`Слово ${rect.word}; реплика ${label} ${blockId}`} />))}
     </div>}
   </div>;
 }
