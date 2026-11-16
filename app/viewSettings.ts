@@ -28,6 +28,8 @@ export function normalizeView(raw: unknown): ViewSettings {
   const input = raw as Record<string, unknown>;
   for (const flag of VIEW_FLAGS) if (typeof input[flag] === "boolean") view[flag] = input[flag] as boolean;
   if (input.mode === "reply" || input.mode === "page") view.mode = input.mode;
+  // Перевод — основа статьи и отключаться не может: и в старых сохранённых настройках с translation:false он включается.
+  view.translation = true;
   return view;
 }
 

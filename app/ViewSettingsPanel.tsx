@@ -9,10 +9,10 @@ type Props = {
   niqqudAvailable: boolean;
 };
 
+// «Перевод» здесь нет: он показывается всегда (см. normalizeView).
 const BLOCKS: { flag: ViewFlag; label: string }[] = [
   { flag: "original", label: "Оригинал" },
   { flag: "title", label: "Заголовок" },
-  { flag: "translation", label: "Перевод" },
   { flag: "explanation", label: "Объяснение" },
   { flag: "rashi", label: "Раши" },
   { flag: "tosafot", label: "Тосафот" },
