@@ -14,11 +14,24 @@ const alike = (first: string, second: string) => {
   for (const letter of second) { const left = counts.get(letter) ?? 0; if (left > 0) { shared++; counts.set(letter, left - 1); } }
   return shared >= Math.max(first.length, second.length) - 2;
 };
-const score = (printed: string, source: string) => {
-  if (printed === source) return 2;
+// Everything the score needs from a word is computed once per word, not once per cell of the table: the table has
+// (printed words x source words) cells and the same words meet in it over and over.
+type Prepared = { word: string; length: number; strip: string; skeleton: string; mask: number };
+const prepare = (word: string): Prepared => {
+  let mask = 0;
+  for (let i = 0; i < word.length; i++) { const code = word.charCodeAt(i) - 0x5d0; mask |= 1 << (code >= 0 && code < 31 ? code : 31); }
+  const stripped = strip(word);
+  return { word, length: word.length, strip: stripped, skeleton: stripped.replace(/[יו]/g, ""), mask };
+};
+const bits = (value: number) => { let count = 0; while (value) { value &= value - 1; count++; } return count; };
+// A letter of one word that the other lacks is a letter that cannot be shared: more than two of them rule out "alike"
+// (the same verdict as `alike`, reached without building a count table for the pair).
+const mayBeAlike = (first: Prepared, second: Prepared) => Math.abs(first.length - second.length) <= 2 && bits(first.mask & ~second.mask) <= 2 && bits(second.mask & ~first.mask) <= 2;
+const scorePrepared = (printed: Prepared, source: Prepared) => {
+  if (printed.word === source.word) return 2;
   if (printed.length < 2 || source.length < 2) return -1.2;
-  if (alike(printed, source) && sameEditionWord(printed, source)) return 1.2;
-  if (printed.length >= 2 && source.length >= 2 && (strip(printed) === strip(source) || skeleton(printed) === skeleton(source))) return 1;
+  if (mayBeAlike(printed, source) && alike(printed.word, source.word) && sameEditionWord(printed.word, source.word)) return 1.2;
+  if (printed.strip === source.strip || printed.skeleton === source.skeleton) return 1;
   return -1.2;
 };
 
@@ -26,11 +39,12 @@ const score = (printed: string, source: string) => {
 // words: the printed words that correspond to a source word, by index.
 export function alignLocally(printed: string[], source: string[]) {
   const n = printed.length, m = source.length, width = m + 1;
+  const printedWords = printed.map(prepare), sourceWords = source.map(prepare);
   const cells = new Float32Array((n + 1) * width);
   const steps = new Uint8Array((n + 1) * width);
   let best = 0, bestRow = 0, bestColumn = 0;
   for (let row = 1; row <= n; row++) for (let column = 1; column <= m; column++) {
-    const diagonal = cells[(row - 1) * width + column - 1] + score(printed[row - 1], source[column - 1]);
+    const diagonal = cells[(row - 1) * width + column - 1] + scorePrepared(printedWords[row - 1], sourceWords[column - 1]);
     const up = cells[(row - 1) * width + column] - 1, left = cells[row * width + column - 1] - 1;
     let value = 0, step = 0;
     if (diagonal > value) { value = diagonal; step = 1; }
@@ -43,7 +57,7 @@ export function alignLocally(printed: string[], source: string[]) {
   let row = bestRow, column = bestColumn;
   while (row > 0 && column > 0 && cells[row * width + column] > 0) {
     const step = steps[row * width + column];
-    if (step === 1) { if (score(printed[row - 1], source[column - 1]) > 0) matches.set(row - 1, column - 1); row--; column--; }
+    if (step === 1) { if (scorePrepared(printedWords[row - 1], sourceWords[column - 1]) > 0) matches.set(row - 1, column - 1); row--; column--; }
     else if (step === 2) row--;
     else if (step === 3) column--;
     else break;

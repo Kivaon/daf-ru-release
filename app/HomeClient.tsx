@@ -1,6 +1,7 @@
 "use client";
 
 import {sourceComments} from "./sefariaLinks";
+import {boundaryFlags,clean,fetchCommentSnapshot,fetchSideSnapshot,flagsContinue,flagsOf,linksFromCommentSnapshot,type BoundaryFlags} from "./sefariaSnapshot";
 import PrintedCommentary from "./PrintedCommentary";
 import {commentaryLabel} from './printedSources';
 import PrintedLocation from "./PrintedLocation";
@@ -18,7 +19,7 @@ import PageFlow from "./PageFlow";
 import { DEFAULT_VIEW, loadView, saveView, originalText, type ViewSettings } from "./viewSettings";
 import { buildPageFlow, type FlowArticle } from "./pageFlowModel";
 import { alignFromFile, loadWordsFile, type WordsFile } from "./vocalAlign";
-import { DICTA_URL, isVocalSide, letters, vocalAvailable, vocalFormsFor, vocalizedSegment, type VocalSide } from "./vocalized";
+import { isVocalSide, letters, vocalAvailable, vocalFormsFor, vocalizedSegment, type VocalSide } from "./vocalized";
 import { buildIndex, isLexicon, lookupWord, type LexIndex } from "./lexicon";
 import { wordAtPoint, type WordBox } from "./wordAtPoint";
 import WordCard from "./WordCard";
@@ -31,7 +32,6 @@ import { TRACTATES, tractateBySefaria } from "./talmudCatalog";
 const EMPTY_SEGMENTS:DafSegment[]=[];
 const EMPTY_COMMENTS:CommentaryLink[]=[];
 const POSITION_KEY = "daf-ru-last-page";
-const clean = (value: string) => value.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").trim();
 const dibur = (value: string) => {
   const bold = value.match(/<b[^>]*>([\s\S]*?)<\/b>/i)?.[1];
   const source = clean(bold || value);
@@ -62,20 +62,49 @@ type GeneratedArticle = {
   pages?:GeneratedPage[];
 };
 
-type PageBundle = { pageKey:string; segments:DafSegment[]; comments:CommentaryLink[]; davidsonHe:string[]; davidsonEn:string[] };
+type PageBundle = { pageKey:string; segments:DafSegment[]; comments:CommentaryLink[]; flags:BoundaryFlags };
 type BoundaryState = { previous?:PageBundle; next?:PageBundle; joinsPrevious:boolean; joinsNext:boolean };
+// Кеш ответов Sefaria на время сессии: переход на соседнюю сторону не запрашивает уже загруженное.
+const sefariaCache=new Map<string,Promise<unknown>>();
+function cachedSefaria<T>(key:string,make:()=>Promise<T>):Promise<T>{
+  let hit=sefariaCache.get(key) as Promise<T>|undefined;
+  if(!hit){hit=make();hit.catch(()=>sefariaCache.delete(key));sefariaCache.set(key,hit);if(sefariaCache.size>48)sefariaCache.delete(sefariaCache.keys().next().value as string);}
+  return hit;
+}
+type TextBundle = Omit<PageBundle,"comments">;
+const loadSideText=(sefaria:string,key:string)=>cachedSefaria(`t|${sefaria}|${key}`,async():Promise<TextBundle>=>{
+  const ref=`${sefaria}.${key}`;
+  // Снимок текста на нашем сервере: быстро и не зависит от Sefaria; нет файла — берём живой текст ниже.
+  const snapshot=await fetchSideSnapshot(sefaria,key);
+  if(snapshot){
+    const fromSnapshot=snapshot.segs.map((text,index)=>({id:`${key}:${index+1}`,kind:/^(מתני|מַתְנִי)/.test(text)?"Мишна":"Гемара",text})).filter((item)=>item.text);
+    if(fromSnapshot.length)return{pageKey:key,segments:fromSnapshot,flags:flagsOf(snapshot)};
+  }
+  const [textResponse,davidsonResponse]=await Promise.all([
+    fetch(`https://www.sefaria.org/api/texts/${encodeURIComponent(ref)}/he/Wikisource_Talmud_Bavli?context=0&commentary=0`),
+    fetch(`https://www.sefaria.org/api/texts/${encodeURIComponent(ref)}?context=0&commentary=0`),
+  ]);
+  if(!textResponse.ok)throw new Error("Sefaria не вернула текст листа");
+  const data=await textResponse.json() as {he?:string[];error?:string};
+  if(data.error||!Array.isArray(data.he)||!data.he.every(v=>typeof v==="string"))throw new Error("Sefaria не вернула полный текст листа");
+  const davidson=davidsonResponse.ok?await davidsonResponse.json() as {he?:string[];text?:string[]}:{he:[],text:[]};
+  const pageSegments=(data.he||[]).map((text,index)=>({id:`${key}:${index+1}`,kind:/^(מתני|מַתְנִי)/.test(clean(text))?"Мишна":"Гемара",text:clean(text)})).filter((item)=>item.text);
+  return{pageKey:key,segments:pageSegments,flags:boundaryFlags(davidson.he||[],davidson.text||[])};
+});
+const loadSideLinks=(sefaria:string,key:string)=>cachedSefaria(`l|${sefaria}|${key}`,async():Promise<unknown>=>{
+  // Снимок Раши и Тосафот на нашем сервере (в сотни раз легче полного списка links); нет файла — живой запрос к Sefaria.
+  const snapshot=await fetchCommentSnapshot(sefaria,key);
+  if(snapshot)return linksFromCommentSnapshot(snapshot);
+  const response=await fetch(`https://www.sefaria.org/api/links/${encodeURIComponent(`${sefaria}.${key}`)}?with_text=1`);
+  if(!response.ok)throw new Error("Не удалось получить комментарии Sefaria. Повторите загрузку.");
+  return response.json();
+});
 const pageBefore = (daf:number, side:"a"|"b") => side === "b" ? `${daf}a` : daf > 2 ? `${daf-1}b` : null;
 const pageAfter = (daf:number, side:"a"|"b", lastDaf:number, lastSide:"a"|"b") => {
   if(side === "a") return daf === lastDaf && lastSide === "a" ? null : `${daf}b`;
   return daf < lastDaf ? `${daf+1}a` : null;
 };
-const sentenceEnds = (value:string) => /[.!?׃։][\s"'׳״’”)]*$/.test(clean(value));
-const beginsLowercase = (value:string) => /^[^A-Za-z]*[a-z]/.test(clean(value));
-const boundaryContinues = (left:PageBundle, right:PageBundle) => {
-  const leftHe=left.davidsonHe.at(-1)||"", rightHe=right.davidsonHe[0]||"";
-  const leftEn=left.davidsonEn.at(-1)||"", rightEn=right.davidsonEn[0]||"";
-  return Boolean(leftHe && rightHe && leftEn && rightEn && !sentenceEnds(leftHe) && !sentenceEnds(leftEn) && beginsLowercase(rightEn));
-};
+const boundaryContinues = (left:PageBundle, right:PageBundle) => flagsContinue(left.flags,right.flags);
 
 type SiteTool = {
   name:string;
@@ -116,10 +145,14 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   // Настройки показа статьи (только экран, хранятся в браузере читателя).
   const [view, setView] = useState<ViewSettings>(DEFAULT_VIEW);
   const [viewLoaded, setViewLoaded] = useState(false);
+  // Комментарии всех трёх сторон загружены (до этого статья уже показана).
+  const [linksReady, setLinksReady] = useState(false);
+  // Комментарии текущей стороны пришли (нужны, чтобы показать Раши и Тосафот к реплике).
+  const [commentsReady, setCommentsReady] = useState(false);
   const [pageArticles, setPageArticles] = useState<{key:string;items:FlowArticle[];error:boolean}|null>(null);
   // Огласованный текст Гемары (Dicta) для текущей стороны листа; null — данных нет.
   const [vocal, setVocal] = useState<{key:string;data:VocalSide|null}|null>(null);
-  // Слова Dicta трактата: сопоставляются с живым текстом Sefaria прямо здесь (текущая и соседние стороны листа).
+  // Слова Dicta трактата: сопоставляются с текстом Sefaria прямо здесь (текущая и соседние стороны листа).
   const [wordsFile, setWordsFile] = useState<{tractate:string;file:WordsFile|null}|null>(null);
   // Словарная статья по клику на слово: в статье, в сплошном тексте и на PDF (пока тестовый словарь).
   const [wordCard, setWordCard] = useState<{word:string;box:WordBox;ref?:string;source:"text"|"pdf"}|null>(null);
@@ -171,36 +204,51 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     if (!restored) return;
     const controller = new AbortController();
     (async () => {
-      setStatus("loading"); setError(""); setSegments([]); setSelectedBlock(""); setBlockLocated(false); setComments([]); setSelectedWord(null); setBoundaries({joinsPrevious:false,joinsNext:false});
+      setStatus("loading"); setError(""); setSegments([]); setSelectedBlock(""); setBlockLocated(false); setComments([]); setLinksReady(false); setCommentsReady(false); setSelectedWord(null); setBoundaries({joinsPrevious:false,joinsNext:false});
       try {
-        const loadBundle = async (key:string, includeLinks=true):Promise<PageBundle> => {
-          const ref = `${tractate.sefaria}.${key}`;
-          const [textResponse,davidsonResponse,linksResponse]=await Promise.all([
-            fetch(`https://www.sefaria.org/api/texts/${encodeURIComponent(ref)}/he/Wikisource_Talmud_Bavli?context=0&commentary=0`,{signal:controller.signal}),
-            fetch(`https://www.sefaria.org/api/texts/${encodeURIComponent(ref)}?context=0&commentary=0`,{signal:controller.signal}),
-            includeLinks?fetch(`https://www.sefaria.org/api/links/${encodeURIComponent(ref)}?with_text=1`,{signal:controller.signal}):Promise.resolve(null),
-          ]);
-          if(!textResponse.ok)throw new Error("Sefaria не вернула текст листа");
-          const data=await textResponse.json() as {he?:string[];error?:string};
-          if(data.error||!Array.isArray(data.he)||!data.he.every(v=>typeof v==="string"))throw new Error("Sefaria не вернула полный текст листа");
-          const davidson=davidsonResponse.ok?await davidsonResponse.json() as {he?:string[];text?:string[]}:{he:[],text:[]};
-          const pageSegments=(data.he||[]).map((text,index)=>({id:`${key}:${index+1}`,kind:/^(מתני|מַתְנִי)/.test(clean(text))?"Мишна":"Гемара",text:clean(text)})).filter((item)=>item.text);
-          let pageComments:CommentaryLink[]=[];
-          if(includeLinks){if(!linksResponse?.ok)throw new Error("Не удалось получить комментарии Sefaria. Повторите загрузку.");pageComments=sourceComments(await linksResponse.json(),tractate.sefaria,pageSegments.map(p=>p.id));}
-          return{pageKey:key,segments:pageSegments,comments:pageComments,davidsonHe:davidson.he||[],davidsonEn:davidson.text||[]};
-        };
+        const sefaria=tractate.sefaria;
         const previousKey=pageBefore(daf,side),nextKey=pageAfter(daf,side,tractate.lastDaf,tractate.lastSide);
-        const [current,previous,next]=await Promise.all([loadBundle(pageKey),previousKey?loadBundle(previousKey).catch(()=>undefined):Promise.resolve(undefined),nextKey?loadBundle(nextKey).catch(()=>undefined):Promise.resolve(undefined)]);
-        const nextSegments=current.segments,nextComments=current.comments;
-
-        if (controller.signal.aborted) return;
-        setSegments(nextSegments); setComments(nextComments);
-        setBoundaries({previous,next,joinsPrevious:Boolean(previous&&boundaryContinues(previous,current)),joinsNext:Boolean(next&&boundaryContinues(current,next))});
-        const preferred = landingEdge === "end" ? nextSegments.at(-1)?.id : nextSegments[0]?.id;
+        // Всё нужное стартует сразу и параллельно: тексты трёх сторон и links трёх сторон.
+        const currentText=loadSideText(sefaria,pageKey);
+        const previousText=previousKey?loadSideText(sefaria,previousKey).catch(()=>undefined):Promise.resolve(undefined);
+        const nextText=nextKey?loadSideText(sefaria,nextKey).catch(()=>undefined):Promise.resolve(undefined);
+        const currentRaw=loadSideLinks(sefaria,pageKey);
+        const previousRaw=previousKey?loadSideLinks(sefaria,previousKey).catch(()=>[]):Promise.resolve([]);
+        const nextRaw=nextKey?loadSideLinks(sefaria,nextKey).catch(()=>[]):Promise.resolve([]);
+        const current=await currentText;
+        const idsOf=(bundle:TextBundle)=>bundle.segments.map(p=>p.id);
         const requested=new URLSearchParams(window.location.search).get("ref");
         const wanted=pendingBlock.current;pendingBlock.current=null;
-        setSelectedBlock(wanted&&nextSegments.some(s=>s.id===wanted)?wanted:nextSegments.some(s=>s.id===requested)?requested!:preferred||"");
+        const preferred = landingEdge === "end" ? current.segments.at(-1)?.id : current.segments[0]?.id;
+        const chosen=wanted&&current.segments.some(s=>s.id===wanted)?wanted:current.segments.some(s=>s.id===requested)?requested!:preferred||"";
+        // Соседний текст нужен до показа, только если краевая реплика может продолжаться через границу листа.
+        // Условия — необходимая часть boundaryContinues, проверяемая по одной текущей стороне; остальное догрузится фоном.
+        const needPrevious=chosen!==""&&chosen===current.segments[0]?.id&&current.flags.firstOk&&current.flags.firstLower;
+        const needNext=chosen!==""&&chosen===current.segments.at(-1)?.id&&current.flags.lastOk&&current.flags.lastOpen;
+        const stitched=(previous:TextBundle|undefined,next:TextBundle|undefined):BoundaryState=>({previous:previous&&{...previous,comments:[]},next:next&&{...next,comments:[]},joinsPrevious:Boolean(previous&&boundaryContinues({...previous,comments:[]},{...current,comments:[]})),joinsNext:Boolean(next&&boundaryContinues({...current,comments:[]},{...next,comments:[]}))});
+        const previousNow=needPrevious?await previousText:undefined, nextNow=needNext?await nextText:undefined;
+        if (controller.signal.aborted) return;
+        setSegments(current.segments);
+        setBoundaries(stitched(previousNow,nextNow));
+        setSelectedBlock(chosen);
         setStatus("ready");
+        const fail=(reason:unknown)=>{ if (!controller.signal.aborted) { setStatus("error"); setError(reason instanceof Error ? reason.message : String(reason)); } };
+        // Раши и Тосафот текущей стороны появляются сразу, как придут links, не дожидаясь соседей.
+        void currentRaw.then(raw=>{ const own=sourceComments(raw,sefaria,idsOf(current)); if (controller.signal.aborted) return; setComments(own); setCommentsReady(true); }).catch(fail);
+        const [previous,next]=await Promise.all([previousText,nextText]);
+        if (controller.signal.aborted) return;
+        setBoundaries(stitched(previous,next));
+        // Фоновая волна: комментарии. Статья показана без них; Раши и Тосафот появляются, когда придут links.
+        try {
+          await currentRaw;
+          const [previousComments,nextComments]=await Promise.all([
+            previous?previousRaw.then(raw=>sourceComments(raw,sefaria,idsOf(previous))).catch(()=>[]):[],
+            next?nextRaw.then(raw=>sourceComments(raw,sefaria,idsOf(next))).catch(()=>[]):[],
+          ]);
+          if (controller.signal.aborted) return;
+          setBoundaries(old=>({...old,previous:old.previous&&{...old.previous,comments:previousComments},next:old.next&&{...old.next,comments:nextComments}}));
+          setLinksReady(true);
+        } catch (reason) { fail(reason); }
       } catch (reason) {
         if (!controller.signal.aborted) { setStatus("error"); setError(reason instanceof Error ? reason.message : String(reason)); }
       }
@@ -231,8 +279,8 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   const vocalSide=vocal?.key===vocalKey?vocal.data:null;
   // Стороны, сопоставленные в приложении: своя и соседние (стыковочные реплики берут слова из обеих сторон).
   const wordsNow=wordsFile?.tractate===tractate.sefaria?wordsFile.file:null;
-  // пока файл слов трактата не пришёл (или не отказал), оригинал не показывается, чтобы текст не «перескакивал» с огласовками
-  const wordsPending=wordsFile?.tractate!==tractate.sefaria;
+  // Оригинал с огласовками скрыт, пока не пришёл файл слов трактата (чтобы текст не «перескакивал»); если оригинал или огласовки выключены, ждать нечего.
+  const wordsPending=view.original&&view.niqqud&&wordsFile?.tractate!==tractate.sefaria;
   const alignedSides=useMemo(()=>{
     const out:Record<string,VocalSide|null>={};
     if(!wordsNow)return out;
@@ -245,7 +293,6 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
   const vocalOf=(id:string)=>{const key=id.split(":")[0];return alignedSides[key]??(key===pageKey?vocalSide:null);};
   const currentVocal=alignedSides[pageKey]??vocalSide;
   const showCardTranslation=view.translation&&view.mode==="reply";
-  const vocalShown=view.original&&view.niqqud&&unitSegments.some((part)=>vocalizedSegment(vocalOf(part.id),part.id,part.text)!==null);
   const cardHasContent=view.title||view.original||showCardTranslation||view.explanation;
   const unitRef=isSpanningUnit?`${tractate.sefaria} ${unitSegments[0].id}-${unitSegments[1].id}`:undefined;
   const commentsForRef = useCallback((ref:string) => {
@@ -501,7 +548,7 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
     window.addEventListener("pointerdown", outside);
     return () => { window.removeEventListener("keydown", close); window.removeEventListener("pointerdown", outside); };
   }, [menuOpen]);
-  const sheetViewer = (sheetZoom: number, onFocus?: (box: { left: number; top: number; width: number; height: number }) => void) => <PdfDafViewer zoom={sheetZoom} onFocus={onFocus} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={status==="ready"?segments:EMPTY_SEGMENTS} commentary={status==="ready"?comments:EMPTY_COMMENTS} neighborComments={status==="ready"?neighborComments:EMPTY_COMMENTS} onOpenPage={openComment} onWordClick={(hit)=>openWordCard(hit.word,hit.box,hit.blockId,"pdf")} dataReady={status==="error"||(status==="ready"&&(segments.length===0||segments[0].id.startsWith(`${pageKey}:`)))}/>;
+  const sheetViewer = (sheetZoom: number, onFocus?: (box: { left: number; top: number; width: number; height: number }) => void) => <PdfDafViewer zoom={sheetZoom} onFocus={onFocus} selectedBlock={selectedBlock} landingEdge={landingEdge} onSelect={selectWord} onBlockLocated={located} pdfUrl={pdfUrl} label={label} segments={status==="ready"?segments:EMPTY_SEGMENTS} commentary={status==="ready"&&commentsReady?comments:EMPTY_COMMENTS} neighborComments={status==="ready"&&linksReady?neighborComments:EMPTY_COMMENTS} onOpenPage={openComment} onWordClick={(hit)=>openWordCard(hit.word,hit.box,hit.blockId,"pdf")} dataReady={status==="error"||(status==="ready"&&commentsReady&&(segments.length===0||segments[0].id.startsWith(`${pageKey}:`)))}/>;
 
   return <main className={canEditArticles?"editorMode":"readerMode"}>
     <header className={`topbar${headerHidden&&!menuOpen?" topbarHidden":""}`}><a className="brand" href="/" aria-label="Обновить страницу" title="Обновить страницу" onClick={(event)=>{event.preventDefault();window.location.reload();}}><span className="brandMark">דף</span><span>Daf-Ru</span></a><div className="mobileActions">{user?<><span className="mobileEmail" title={user.email}>{user.email}</span><a className="mobileIcon" href={signOutHref} target="_top" aria-label="Выйти"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 4H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h4"/><path d="M16 8l4 4-4 4M20 12H9"/></svg></a></>:<a className="mobileIcon" href={signInHref} target="_top" aria-label="Войти"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4"/><path d="M10 8l-4 4 4 4M6 12h11"/></svg></a>}<button className="menuToggle" aria-label="Меню" aria-expanded={menuOpen} aria-controls="mainMenu" onClick={()=>setMenuOpen(v=>!v)}>{menuOpen?"✕":"☰"}</button></div><div className={`account${menuOpen?" open":""}`} id="mainMenu" onClick={(event)=>{const target=event.target as HTMLElement;if(target.closest(".aboutProjectButton"))return;if(target.closest("a,button"))setMenuOpen(false);}}>{user?<><span title={user.email}>{user.name}</span>{user.role==="admin"&&<button className="iconButton" onClick={openUsers}>Пользователи</button>}<a className="accountLink" href={signOutHref} target="_top">Выйти</a></>:<a className="signInButton" href={signInHref} target="_top">Войти</a>}<button className="iconButton" onClick={()=>setDictionaryOpen(true)} aria-label="Открыть словарь">⌘ <span>Словарь</span>{words.length>0&&<b>{words.length}</b>}</button>{canEditArticles&&<a className="mapNavLink" href="/translation-map">Карта перевода</a>}<AboutProject /></div></header>
@@ -515,8 +562,8 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
       {status!=="ready"?<div className="studyWaiting"><span>{label}</span><h2>Получаем текст и комментарии Sefaria…</h2><p>{error||"PDF доступен независимо от загрузки текста. Геометрия не влияет на состав материалов."}</p></div>:!selected?<div className="analysisCard"><h2>На этой стороне нет реплик Гемары</h2><p>В выбранном источнике Sefaria текст Гемары отсутствует. Оригинальный PDF доступен слева; найденные продолжения комментариев показаны отдельно.</p></div>:<>
       {currentArticleLoad?.status==="error"?<div className="articleLoadNotice" role="alert">Не удалось загрузить сохранённый разбор. <button onClick={()=>setArticleRetry(value=>value+1)}>Повторить загрузку</button></div>:!currentArticleLoad&&<p role="status">Загружаем сохранённый разбор…</p>}
       {view.mode==="page"&&view.translation&&<PageFlow label={label} items={flowItems} ready={pageArticles?.key===pageKeyForFlow} error={pageArticles?.key===pageKeyForFlow&&pageArticles.error} onSelect={setSelectedBlock}/>}
-      {cardHasContent&&<section className="analysisCard gemaraCard">{view.title&&<div className="cardTitle"><span>{savedArticle?"01":"•"}</span><div><h2>{activeGeneratedArticle?.title || (savedArticle?"Почему необходимы оба случая?":currentArticleLoad?.status==="ready"?"Разбор пока не сохранён":"Разбор")}</h2></div></div>}{view.original&&<div className={`spanningOriginal ${isSpanningUnit?"isSpanning":""}`} style={wordsPending?{visibility:"hidden"}:undefined}>{unitSegments.map((part)=><div key={part.id} className={`hebrew spanningPart ${part.id===selectedBlock?"active":"inactive"}`} lang="he" dir="rtl" data-ref={part.id}><small>{part.id===selectedBlock?"НА ЭТОМ ЛИСТЕ":part.id.split(":")[0]===boundaries.previous?.pageKey?"ПРОШЛЫЙ ЛИСТ":"СЛЕДУЮЩИЙ ЛИСТ"}</small><span>{boldService(originalText(part.text,view,vocalizedSegment(vocalOf(part.id),part.id,part.text)))}</span>{part.id!==selectedBlock&&<button type="button" className="unitPartNavigation" lang="ru" dir="ltr" onClick={()=>openUnitPart(part.id)}>Перейти к листу {part.id.split(":")[0].replace("a","а").replace("b","б")}</button>}</div>)}</div>}{vocalShown&&<p className="vocalCredit" lang="ru">Огласовки: <a href={DICTA_URL} target="_blank" rel="noopener noreferrer">Dicta</a> — Израильский центр анализа текстов, лицензия CC BY-SA</p>}{activeGeneratedArticle?<>{(showCardTranslation||view.explanation)&&<div className="rule"/>}{showCardTranslation&&<><h3>Точный перевод</h3>{activeGeneratedArticle.parts?.length?<div className="spanningTranslation">{activeGeneratedArticle.parts.map((part)=><div key={part.ref} className={`translationPart ${part.ref===selectedBlock?"active":"inactive"}`}><small>{part.ref}</small><span>{boldTranslationService(part.translation)}</span>{part.ref!==selectedBlock&&<button type="button" className="unitPartNavigation" onClick={()=>openUnitPart(part.ref)}>Перейти к листу {part.ref.split(":")[0].replace("a","а").replace("b","б")}</button>}</div>)}</div>:<p>{boldTranslationService(activeGeneratedArticle.translation)}</p>}</>}{view.explanation&&<div className="explanation"><span>Объяснение</span><p>{activeGeneratedArticle.explanation}</p></div>}</>:savedArticle?(showCardTranslation?<><div className="rule"/><h3>Точный перевод</h3><p>Они необходимы. Ведь если бы учили только о покупающем, я бы сказал: это потому, что он приводит её к святости. Но продающий, который выводит её из святости, — можно было бы сказать: оштрафуем его. Поэтому сообщается нам, что это не так.</p></>:null):<div className="explanation"><span>Источник</span><p>Проверенный оригинал из Sefaria. Нажмите «Создать статью».</p></div>}</section>}
-      {view.rashi&&rashi.length>0&&<><div className="commentaryHeading"><span>Раши к этой реплике</span><i>{rashi.length}</i></div>{rashi.map((item)=>{const article=activeGeneratedArticle?.rashi.find((entry)=>entry.ref===item.ref);return <section className="analysisCard sourceCommentCard rashiSourceCard" key={item.ref}><div className="commentMeta"><b>РАШИ</b><PrintedLocation tractate={tractate.sefaria} sourceRef={item.ref}/></div>{view.original&&<div className="hebrew" lang="he" dir="rtl">{boldDibur(item.text,item.dibur)}</div>}{article&&(view.translation||view.explanation)&&<>{view.original&&<div className="rule"/>}{view.translation&&<><h3>Точный перевод</h3><p>{boldTranslatedDibur(article.translation)}</p></>}{view.explanation&&<div className="explanation"><span>Объяснение</span><p>{article.explanation}</p></div>}</>}</section>})}</>}{view.tosafot&&tosafot.length>0&&<><div className="commentaryHeading tosafotHeading"><span>Тосафот к этой реплике</span><i>{tosafot.length}</i></div>{tosafot.map((item)=>{const article=activeGeneratedArticle?.tosafot.find((entry)=>entry.ref===item.ref);return <section className="analysisCard sourceCommentCard tosafotCard" key={item.ref}><div className="commentMeta"><b>ТОСАФОТ</b><PrintedLocation tractate={tractate.sefaria} sourceRef={item.ref}/></div>{view.original&&<div className="hebrew" lang="he" dir="rtl">{boldDibur(item.text,item.dibur)}</div>}{article&&(view.translation||view.explanation)&&<>{view.original&&<div className="rule"/>}{view.translation&&<><h3>Точный перевод</h3><p>{boldTranslatedDibur(article.translation)}</p></>}{view.explanation&&<div className="explanation"><span>Объяснение</span><p>{article.explanation}</p></div>}</>}</section>})}</>}{linked.length===0&&(view.rashi||view.tosafot)&&<div className="noCommentary">Sefaria не связывает с этой репликой комментарии Раши или Тосафот.</div>}<div className="articleFooter"><strong>{tractate.ru} {isSpanningUnit?unitSegments.map((part)=>part.id).join(" + "):selectedBlock}</strong>{savedArticle&&!activeGeneratedArticle&&<div className="sourceBadge"><b>DAF-RU</b><span>редакционная версия</span><time>22.09.2026</time></div>}{activeGeneratedArticle&&<div className="sourceBadge aiBadge"><b>AI</b><span>{activeGeneratedArticle.provider||"AI"}</span><time>{new Date(activeGeneratedArticle.generatedAt).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"})}</time></div>}{canEditArticles&&<button className="editArticleButton" disabled={currentArticleLoad?.status!=="ready"} onClick={openEditor}>{activeGeneratedArticle?"Редактировать":"Создать статью"}</button>}</div></>}
+      {cardHasContent&&<section className="analysisCard gemaraCard">{view.title&&<div className="cardTitle"><span>{savedArticle?"01":"•"}</span><div><h2>{activeGeneratedArticle?.title || (savedArticle?"Почему необходимы оба случая?":currentArticleLoad?.status==="ready"?"Разбор пока не сохранён":"Разбор")}</h2></div></div>}{view.original&&<div className={`spanningOriginal ${isSpanningUnit?"isSpanning":""}`} style={wordsPending?{visibility:"hidden"}:undefined}>{unitSegments.map((part)=><div key={part.id} className={`hebrew spanningPart ${part.id===selectedBlock?"active":"inactive"}`} lang="he" dir="rtl" data-ref={part.id}><small>{part.id===selectedBlock?"НА ЭТОМ ЛИСТЕ":part.id.split(":")[0]===boundaries.previous?.pageKey?"ПРОШЛЫЙ ЛИСТ":"СЛЕДУЮЩИЙ ЛИСТ"}</small><span>{boldService(originalText(part.text,view,vocalizedSegment(vocalOf(part.id),part.id,part.text)))}</span>{part.id!==selectedBlock&&<button type="button" className="unitPartNavigation" lang="ru" dir="ltr" onClick={()=>openUnitPart(part.id)}>Перейти к листу {part.id.split(":")[0].replace("a","а").replace("b","б")}</button>}</div>)}</div>}{activeGeneratedArticle?<>{(showCardTranslation||view.explanation)&&<div className="rule"/>}{showCardTranslation&&<><h3>Точный перевод</h3>{activeGeneratedArticle.parts?.length?<div className="spanningTranslation">{activeGeneratedArticle.parts.map((part)=><div key={part.ref} className={`translationPart ${part.ref===selectedBlock?"active":"inactive"}`}><small>{part.ref}</small><span>{boldTranslationService(part.translation)}</span>{part.ref!==selectedBlock&&<button type="button" className="unitPartNavigation" onClick={()=>openUnitPart(part.ref)}>Перейти к листу {part.ref.split(":")[0].replace("a","а").replace("b","б")}</button>}</div>)}</div>:<p>{boldTranslationService(activeGeneratedArticle.translation)}</p>}</>}{view.explanation&&<div className="explanation"><span>Объяснение</span><p>{activeGeneratedArticle.explanation}</p></div>}</>:savedArticle?(showCardTranslation?<><div className="rule"/><h3>Точный перевод</h3><p>Они необходимы. Ведь если бы учили только о покупающем, я бы сказал: это потому, что он приводит её к святости. Но продающий, который выводит её из святости, — можно было бы сказать: оштрафуем его. Поэтому сообщается нам, что это не так.</p></>:null):<div className="explanation"><span>Источник</span><p>Проверенный оригинал из Sefaria. Нажмите «Создать статью».</p></div>}</section>}
+      {view.rashi&&rashi.length>0&&<><div className="commentaryHeading"><span>Раши к этой реплике</span><i>{rashi.length}</i></div>{rashi.map((item)=>{const article=activeGeneratedArticle?.rashi.find((entry)=>entry.ref===item.ref);return <section className="analysisCard sourceCommentCard rashiSourceCard" key={item.ref}><div className="commentMeta"><b>РАШИ</b><PrintedLocation tractate={tractate.sefaria} sourceRef={item.ref}/></div>{view.original&&<div className="hebrew" lang="he" dir="rtl">{boldDibur(item.text,item.dibur)}</div>}{article&&(view.translation||view.explanation)&&<>{view.original&&<div className="rule"/>}{view.translation&&<><h3>Точный перевод</h3><p>{boldTranslatedDibur(article.translation)}</p></>}{view.explanation&&<div className="explanation"><span>Объяснение</span><p>{article.explanation}</p></div>}</>}</section>})}</>}{view.tosafot&&tosafot.length>0&&<><div className="commentaryHeading tosafotHeading"><span>Тосафот к этой реплике</span><i>{tosafot.length}</i></div>{tosafot.map((item)=>{const article=activeGeneratedArticle?.tosafot.find((entry)=>entry.ref===item.ref);return <section className="analysisCard sourceCommentCard tosafotCard" key={item.ref}><div className="commentMeta"><b>ТОСАФОТ</b><PrintedLocation tractate={tractate.sefaria} sourceRef={item.ref}/></div>{view.original&&<div className="hebrew" lang="he" dir="rtl">{boldDibur(item.text,item.dibur)}</div>}{article&&(view.translation||view.explanation)&&<>{view.original&&<div className="rule"/>}{view.translation&&<><h3>Точный перевод</h3><p>{boldTranslatedDibur(article.translation)}</p></>}{view.explanation&&<div className="explanation"><span>Объяснение</span><p>{article.explanation}</p></div>}</>}</section>})}</>}{!commentsReady&&(view.rashi||view.tosafot)&&<div className="noCommentary">Загружаем комментарии Раши и Тосафот…</div>}{commentsReady&&linked.length===0&&(view.rashi||view.tosafot)&&<div className="noCommentary">Sefaria не связывает с этой репликой комментарии Раши или Тосафот.</div>}<div className="articleFooter"><strong>{tractate.ru} {isSpanningUnit?unitSegments.map((part)=>part.id).join(" + "):selectedBlock}</strong>{savedArticle&&!activeGeneratedArticle&&<div className="sourceBadge"><b>DAF-RU</b><span>редакционная версия</span><time>22.09.2026</time></div>}{activeGeneratedArticle&&<div className="sourceBadge aiBadge"><b>AI</b><span>{activeGeneratedArticle.provider||"AI"}</span><time>{new Date(activeGeneratedArticle.generatedAt).toLocaleString("ru-RU",{dateStyle:"short",timeStyle:"short"})}</time></div>}{canEditArticles&&<button className="editArticleButton" disabled={currentArticleLoad?.status!=="ready"||!linksReady} onClick={openEditor}>{activeGeneratedArticle?"Редактировать":"Создать статью"}</button>}</div></>}
     </article></section>
     {wordCard&&<WordCard card={{word:wordCard.word,box:wordCard.box,ref:wordCard.ref,source:wordCard.source,tractate:tractate.sefaria,hit:lexIndex?lookupWord(lexIndex,wordCard.word):{letters:letters(wordCard.word),entries:[],via:null},vocalForms:vocalFormsFor(currentVocal,letters(wordCard.word),wordCard.ref)}} status={lexStatus} loading={!lexIndex} saved={words.includes(wordCard.word)} onSave={saveWordToCollection} onClose={closeWordCard}/>}
     {picked&&<button className="saveSelection" style={{left:picked.x,top:picked.y}} onMouseDown={(e)=>e.preventDefault()} onClick={saveWord}>＋ В словарь</button>}

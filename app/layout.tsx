@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import DebugPanel from "./DebugPanel";
 import { debugBootScript } from "./debugBoot";
+import { DICTA_URL } from "./vocalized";
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://daf-ru.mffkk78khq.chatgpt.site"),
@@ -26,6 +27,6 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ru"><body><script dangerouslySetInnerHTML={{ __html: debugBootScript }} />{children}<DebugPanel /><footer className="siteFooter" aria-label="Информация о сайте"><span>© 2026 Pitronot Group</span><span>Использованы материалы <a href="https://www.sefaria.org" target="_blank" rel="noopener noreferrer">Sefaria</a></span><span>Версия 81 · Опубликовано <time dateTime="2026-10-12">12.10.2026</time></span></footer></body></html>
+    <html lang="ru"><body><script dangerouslySetInnerHTML={{ __html: debugBootScript }} />{children}<DebugPanel /><footer className="siteFooter" aria-label="Информация о сайте"><p>Daf-Ru — учебный проект Pitronot Group, 2026</p><p>Версия 81 · Опубликовано <time dateTime="2026-10-12">12.10.2026</time></p><p className="siteFooterSources">Использованы материалы: <a href="https://www.sefaria.org" target="_blank" rel="noopener noreferrer">Sefaria</a> и <a href={DICTA_URL} target="_blank" rel="noopener noreferrer">Dicta</a> (огласовки; лицензия <a href="https://creativecommons.org/licenses/by-sa/4.0/" target="_blank" rel="noopener noreferrer">CC BY-SA</a>)</p></footer></body></html>
   );
 }
