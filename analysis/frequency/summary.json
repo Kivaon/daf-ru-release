@@ -1,0 +1,270 @@
+{
+ "source": {
+  "repo": "Dicta-Israel-Center-for-Text-Analysis/Talmud-Bavli-with-Nikud",
+  "commit": "8772e90fac22060ea423c168c0f95868653f6ef1",
+  "variant": "maleh",
+  "license": "CC BY-SA"
+ },
+ "tractates": 37,
+ "sides": 5350,
+ "tokens": 1855492,
+ "spellings": 91375,
+ "spellings_once": 35594,
+ "spellings_once_pct": 39.0,
+ "tokens_in_spellings_once_pct": 1.9,
+ "coverage_by_spellings_pct": {
+  "100": 30.8,
+  "200": 39.6,
+  "300": 45.1,
+  "500": 51.9,
+  "1000": 60.8,
+  "2000": 69.2,
+  "3000": 73.9,
+  "5000": 79.4,
+  "10000": 86.1,
+  "20000": 91.8
+ },
+ "stems_estimate": 54870,
+ "coverage_by_stems_pct": {
+  "100": 35.7,
+  "200": 45.9,
+  "300": 52.3,
+  "500": 60.2,
+  "1000": 70.3,
+  "2000": 79.2,
+  "3000": 83.8,
+  "5000": 88.7,
+  "10000": 93.8,
+  "20000": 97.3
+ },
+ "vocalization": {
+  "spellings_with_several_vocalizations": 14372,
+  "share_of_spellings_pct": 15.7,
+  "share_of_tokens_pct": 67.6,
+  "vocalized_forms_total": 112050
+ },
+ "per_tractate": {
+  "Arakhin": {
+   "sides": 65,
+   "tokens": 24919,
+   "spellings": 5207,
+   "once": 2470
+  },
+  "Avoda_Zara": {
+   "sides": 150,
+   "tokens": 51555,
+   "spellings": 10235,
+   "once": 5309
+  },
+  "Bava_Batra": {
+   "sides": 350,
+   "tokens": 89903,
+   "spellings": 13942,
+   "once": 6870
+  },
+  "Bava_Kamma": {
+   "sides": 236,
+   "tokens": 85830,
+   "spellings": 11549,
+   "once": 5272
+  },
+  "Bava_Metzia": {
+   "sides": 235,
+   "tokens": 85813,
+   "spellings": 12496,
+   "once": 5874
+  },
+  "Beitzah": {
+   "sides": 78,
+   "tokens": 25685,
+   "spellings": 5105,
+   "once": 2460
+  },
+  "Bekhorot": {
+   "sides": 119,
+   "tokens": 41304,
+   "spellings": 7278,
+   "once": 3463
+  },
+  "Berakhot": {
+   "sides": 125,
+   "tokens": 70938,
+   "spellings": 12633,
+   "once": 6540
+  },
+  "Chagigah": {
+   "sides": 51,
+   "tokens": 18640,
+   "spellings": 5017,
+   "once": 2670
+  },
+  "Eruvin": {
+   "sides": 207,
+   "tokens": 68751,
+   "spellings": 9972,
+   "once": 4655
+  },
+  "Gittin": {
+   "sides": 178,
+   "tokens": 62235,
+   "spellings": 10418,
+   "once": 5245
+  },
+  "Horayot": {
+   "sides": 25,
+   "tokens": 12909,
+   "spellings": 3012,
+   "once": 1534
+  },
+  "Hullin": {
+   "sides": 281,
+   "tokens": 90400,
+   "spellings": 13027,
+   "once": 6167
+  },
+  "Karetot": {
+   "sides": 54,
+   "tokens": 26910,
+   "spellings": 4864,
+   "once": 2228
+  },
+  "Ketubot": {
+   "sides": 222,
+   "tokens": 74673,
+   "spellings": 11366,
+   "once": 5464
+  },
+  "Kiddushin": {
+   "sides": 162,
+   "tokens": 59827,
+   "spellings": 9900,
+   "once": 4803
+  },
+  "Makkot": {
+   "sides": 46,
+   "tokens": 17583,
+   "spellings": 4175,
+   "once": 2079
+  },
+  "Megillah": {
+   "sides": 61,
+   "tokens": 29029,
+   "spellings": 7245,
+   "once": 4066
+  },
+  "Meila": {
+   "sides": 41,
+   "tokens": 8333,
+   "spellings": 2278,
+   "once": 1196
+  },
+  "Menahot": {
+   "sides": 217,
+   "tokens": 73506,
+   "spellings": 10490,
+   "once": 4810
+  },
+  "Moed_Katan": {
+   "sides": 55,
+   "tokens": 22777,
+   "spellings": 5677,
+   "once": 3063
+  },
+  "Nazir": {
+   "sides": 130,
+   "tokens": 28580,
+   "spellings": 4866,
+   "once": 2171
+  },
+  "Nedarim": {
+   "sides": 180,
+   "tokens": 35084,
+   "spellings": 6997,
+   "once": 3608
+  },
+  "Niddah": {
+   "sides": 143,
+   "tokens": 51608,
+   "spellings": 8441,
+   "once": 4029
+  },
+  "Pesachim": {
+   "sides": 240,
+   "tokens": 82998,
+   "spellings": 12590,
+   "once": 6064
+  },
+  "Rosh_Hashanah": {
+   "sides": 67,
+   "tokens": 23751,
+   "spellings": 5441,
+   "once": 2753
+  },
+  "Sanhedrin": {
+   "sides": 224,
+   "tokens": 102630,
+   "spellings": 17193,
+   "once": 8912
+  },
+  "Shabbat": {
+   "sides": 312,
+   "tokens": 116251,
+   "spellings": 18103,
+   "once": 9157
+  },
+  "Shevuot": {
+   "sides": 96,
+   "tokens": 33221,
+   "spellings": 5473,
+   "once": 2431
+  },
+  "Sota": {
+   "sides": 96,
+   "tokens": 39029,
+   "spellings": 8833,
+   "once": 4764
+  },
+  "Sukkah": {
+   "sides": 110,
+   "tokens": 32870,
+   "spellings": 6612,
+   "once": 3296
+  },
+  "Taanit": {
+   "sides": 59,
+   "tokens": 26666,
+   "spellings": 6819,
+   "once": 3794
+  },
+  "Tamid": {
+   "sides": 17,
+   "tokens": 5044,
+   "spellings": 2085,
+   "once": 1269
+  },
+  "Temura": {
+   "sides": 65,
+   "tokens": 23652,
+   "spellings": 4297,
+   "once": 1938
+  },
+  "Yevamot": {
+   "sides": 242,
+   "tokens": 85779,
+   "spellings": 11310,
+   "once": 5205
+  },
+  "Yoma": {
+   "sides": 173,
+   "tokens": 57042,
+   "spellings": 10591,
+   "once": 5300
+  },
+  "Zevahim": {
+   "sides": 238,
+   "tokens": 69767,
+   "spellings": 9111,
+   "once": 3991
+  }
+ }
+}
