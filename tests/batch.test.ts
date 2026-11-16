@@ -130,3 +130,27 @@ test('real Nazir Tosafot survives draft reopen and atomic publication without an
  state=await changeBatch(db,'alice',{tractate:'Nazir',page:'33a',revision:state.revision,index:0,action:'publish'});
  const rows=await articleRows(db,'Nazir',['33a:2']);assert.deepEqual(JSON.parse(rows[0].tosafot_json),draft.pages[0].tosafot);assert.equal(state.entries[0].published,true);
 });
+
+import { loadBundle, continues } from '../app/batchSources.ts';
+import { commentSnapshotFromLinks, snapshotFromTexts } from '../app/sefariaSnapshot.ts';
+
+test('подготовка листа берёт текст и комментарии из снимков и не обращается к Sefaria', async () => {
+  const side = snapshotFromTexts(['מתני׳ א ב', '', 'ג ד'], ['x'], ['lower start']);
+  const links = [{ collectiveTitle: { en: 'Rashi' }, ref: 'Rashi on Bekhorot 2b:1:1', anchorRef: 'Bekhorot 2b:1', he: '<b>מתני׳</b> - פירוש' }];
+  const comments = commentSnapshotFromLinks(links);
+  const asked: string[] = [];
+  const assets = async (path: string) => { asked.push(path); return { ok: true, json: async () => (path.startsWith('/text/') ? side : comments) } as Response; };
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => { throw new Error('к Sefaria обращаться нельзя'); }) as typeof fetch;
+  try {
+    const bundle = await loadBundle('Bekhorot', '2b', assets);
+    assert.deepEqual(asked.sort(), ['/comments/Bekhorot/2b.json', '/text/Bekhorot/2b.json']);
+    assert.deepEqual(bundle.parts.map((part) => part.ref), ['2b:1', '2b:3']);
+    assert.equal(bundle.parts[0].rashi.length, 1);
+    assert.equal(bundle.parts[0].rashi[0].original, 'מתני׳ - פירוש');
+    assert.equal(bundle.flags?.firstLower, true);
+    const prev = { ...bundle, page: '2a', flags: { firstOk: true, firstLower: false, lastOk: true, lastOpen: true } };
+    assert.equal(continues(prev, bundle), true);
+    assert.equal(continues({ ...prev, flags: { ...prev.flags, lastOpen: false } }, bundle), false);
+  } finally { globalThis.fetch = realFetch; }
+});
