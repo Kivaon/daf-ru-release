@@ -7,6 +7,7 @@ import { addOpeningWords as addDiburOpening, commentAreas, decodeWord, editionWo
 import { locateCommentary } from "./pdfLocate";
 import { beginningPlace, sheetLabel } from "./pdfJump";
 import { centerScroll } from "./pdfScroll";
+import { neighbourPdfs } from "./pdfNeighbours";
 import { commentarySizes, sizeOf } from "./pdfSizes";
 
 export type DafSegment = { id: string; kind: string; text: string };
@@ -148,6 +149,21 @@ async function fetchPdf(url: string) {
   throw new Error(failure);
 }
 
+// The sheet is requested as soon as its page is opened, in parallel with the Sefaria texts (not after them),
+// and kept in memory for the next visit; the neighbouring sheets are fetched in idle time.
+const pdfFiles = new Map<string, Promise<ArrayBuffer>>();
+function pdfFile(url: string): Promise<ArrayBuffer> {
+  let bytes = pdfFiles.get(url);
+  if (!bytes) {
+    bytes = fetchPdf(url).then((response) => response.arrayBuffer());
+    bytes.catch(() => pdfFiles.delete(url));
+    pdfFiles.set(url, bytes);
+    if (pdfFiles.size > 6) pdfFiles.delete(pdfFiles.keys().next().value as string);
+  }
+  return bytes;
+}
+let pdfWorkerWarmed = false;
+
 const asBlocks = (found: Record<string, WordRect[]>) => Object.fromEntries(Object.entries(found).map(([ref, words]) => [ref, { words, lines: lineRects(words) }])) as Record<string, LocatedBlock>;
 
 function addOpeningWords(blocks:Record<string,LocatedBlock>, candidates:WordRect[], segments:DafSegment[], zoom:number) {
@@ -218,6 +234,12 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
   // a comment printed on this sheet but belonging to another one: asked about before the sheet is left
   const [jump, setJump] = useState<{ x: number; y: number; scale: number; comment: CommentaryLink } | null>(null);
 
+  // Not waiting for the Sefaria texts: the sheet, the PDF.js script and its worker start downloading at once.
+  useEffect(() => {
+    void loadPdfJs().catch(() => undefined);
+    void pdfFile(pdfUrl).catch(() => undefined);
+    if (!pdfWorkerWarmed) { pdfWorkerWarmed = true; void fetch("/pdf.worker.min.js?v=3", { cache: "force-cache" }).catch(() => undefined); }
+  }, [pdfUrl]);
   useEffect(() => {
     if (!dataReady) { setStatus("loading"); return; }
     let cancelled = false;
@@ -227,9 +249,10 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
     async function renderPdf() {
       try {
         setStatus("loading"); setErrorMessage(""); setAlignmentWarning("");
-        const [pdfjsApi, response] = await Promise.all([loadPdfJs(), fetchPdf(pdfUrl)]);
+        const [pdfjsApi, bytes] = await Promise.all([loadPdfJs(), pdfFile(pdfUrl)]);
         pdfjsApi.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js?v=3";
-        const task0 = pdfjsApi.getDocument({ data: new Uint8Array(await response.arrayBuffer()) });
+        // PDF.js hands the buffer over to its worker, so each document gets a copy of the kept one
+        const task0 = pdfjsApi.getDocument({ data: new Uint8Array(bytes.slice(0)) });
         loadingTask = task0;
         const pdf = await task0.promise as {
           getPage: (pageNumber: number) => Promise<{
@@ -394,6 +417,12 @@ export function PdfDafViewer({ zoom, selectedBlock, landingEdge = "start", onSel
       view.scrollTo(centerScroll({ left: offsetLeft, top: offsetTop, width: stage.offsetWidth }, lines, Object.values(blocks).flatMap((block) => block.lines), { width: view.clientWidth, height: view.clientHeight }));
     });
   }, [status, readyUrl, blocks, selectedBlock, pdfUrl, onFocus]);
+  // Once the sheet is drawn, the next and the previous sheets are fetched in the background: turning the page is then instant.
+  useEffect(() => {
+    if (status !== "ready" || readyUrl !== pdfUrl) return;
+    const timer = window.setTimeout(() => { for (const url of neighbourPdfs(pdfUrl)) void pdfFile(url).catch(() => undefined); }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [status, readyUrl, pdfUrl]);
   const tractateLabel=label.replace(/\s+\d+[аб]$/,"");
   return <div ref={stageRef} className="pdfStage" style={{ width: size.width, height: size.height }}>
     <canvas ref={canvasRef} aria-label={`Оригинальный PDF, ${label}`} />
