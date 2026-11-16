@@ -8,3 +8,9 @@ Sefaria закрывает скрипты проверкой Cloudflare, поэ�
 4. `node --experimental-strip-types scripts/build-text-snapshot.ts raw public/text`
 
 Shekalim (в Sefaria нет Бавли с таким названием) пропускается: на нём сбор выдаёт ошибки, это ожидаемо.
+
+## Комментарии Раши и Тосафот (public/comments)
+
+Те же шаги, но сборщик `collector-links.py` (порт 8766, папка `rawlinks/`) и страница `http://localhost:8766/?shard=0&of=8&conc=4` (восемь вкладок с shard 0..7; около 40 минут на все стороны, 5 332 запроса links). Затем:
+`node --experimental-strip-types scripts/build-comment-snapshot.ts rawlinks public/comments public/text`
+Сторона пропускается, если по её записям разбор (sourceComments) выдаёт ошибку; тогда приложение берёт links у Sefaria.

@@ -59,3 +59,50 @@ export async function fetchSideSnapshot(sefaria: string, key: string, fetcher: t
     } finally { clearTimeout(timer); }
   } catch { return null; }
 }
+
+/**
+ * Снимок комментариев Раши и Тосафот к стороне листа (public/comments/<Трактат>/<сторона>.json): только записи links Sefaria
+ * (название, ссылка, привязка, текст), нужные для sourceComments; весь список links весит в сотни раз больше.
+ * Из записей собирается тот же список, что отдаёт Sefaria, и дальше работает прежний разбор (sourceComments).
+ */
+export type CommentRecord = { c: "R" | "T"; r: string; a: string; h: string };
+export type CommentSnapshot = { v: number; recs: CommentRecord[] };
+
+export const commentsPath = (sefaria: string, key: string) => `/comments/${sefaria.replace(/ /g, "_")}/${key}.json`;
+
+export function commentSnapshotFromLinks(links: unknown): CommentSnapshot {
+  const recs: CommentRecord[] = [];
+  if (!Array.isArray(links)) throw new Error("список links не массив");
+  for (const raw of links) {
+    const link = raw as { collectiveTitle?: { en?: string }; ref?: unknown; sourceRef?: unknown; anchorRef?: unknown; he?: unknown };
+    const name = link?.collectiveTitle?.en;
+    if (name !== "Rashi" && name !== "Tosafot") continue;
+    recs.push({ c: name === "Rashi" ? "R" : "T", r: String(link.ref || link.sourceRef || ""), a: String(link.anchorRef || ""), h: typeof link.he === "string" ? link.he : JSON.stringify(link.he ?? "") });
+  }
+  return { v: SNAPSHOT_VERSION, recs };
+}
+
+export function isCommentSnapshot(value: unknown): value is CommentSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Partial<CommentSnapshot>;
+  return item.v === SNAPSHOT_VERSION && Array.isArray(item.recs)
+    && item.recs.every((rec) => rec && (rec.c === "R" || rec.c === "T") && typeof rec.r === "string" && typeof rec.a === "string" && typeof rec.h === "string");
+}
+
+/** Записи снимка в виде, который понимает sourceComments. */
+export function linksFromCommentSnapshot(snapshot: CommentSnapshot) {
+  return snapshot.recs.map((rec) => ({ collectiveTitle: { en: rec.c === "R" ? "Rashi" : "Tosafot" }, ref: rec.r, anchorRef: rec.a, he: rec.h }));
+}
+
+export async function fetchCommentSnapshot(sefaria: string, key: string, fetcher: typeof fetch = fetch, timeoutMs = 4000): Promise<CommentSnapshot | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetcher(commentsPath(sefaria, key), { signal: controller.signal });
+      if (!response.ok) return null;
+      const data = await response.json();
+      return isCommentSnapshot(data) ? data : null;
+    } finally { clearTimeout(timer); }
+  } catch { return null; }
+}

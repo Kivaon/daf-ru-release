@@ -1,7 +1,7 @@
 "use client";
 
 import {sourceComments} from "./sefariaLinks";
-import {boundaryFlags,clean,fetchSideSnapshot,flagsContinue,flagsOf,type BoundaryFlags} from "./sefariaSnapshot";
+import {boundaryFlags,clean,fetchCommentSnapshot,fetchSideSnapshot,flagsContinue,flagsOf,linksFromCommentSnapshot,type BoundaryFlags} from "./sefariaSnapshot";
 import PrintedCommentary from "./PrintedCommentary";
 import {commentaryLabel} from './printedSources';
 import PrintedLocation from "./PrintedLocation";
@@ -88,6 +88,9 @@ const loadSideText=(sefaria:string,key:string)=>cachedSefaria(`t|${sefaria}|${ke
   return{pageKey:key,segments:pageSegments,flags:boundaryFlags(davidson.he||[],davidson.text||[])};
 });
 const loadSideLinks=(sefaria:string,key:string)=>cachedSefaria(`l|${sefaria}|${key}`,async():Promise<unknown>=>{
+  // Снимок Раши и Тосафот на нашем сервере (в сотни раз легче полного списка links); нет файла — живой запрос к Sefaria.
+  const snapshot=await fetchCommentSnapshot(sefaria,key);
+  if(snapshot)return linksFromCommentSnapshot(snapshot);
   const response=await fetch(`https://www.sefaria.org/api/links/${encodeURIComponent(`${sefaria}.${key}`)}?with_text=1`);
   if(!response.ok)throw new Error("Не удалось получить комментарии Sefaria. Повторите загрузку.");
   return response.json();

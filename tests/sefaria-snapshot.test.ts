@@ -43,3 +43,33 @@ test("fetchSideSnapshot: файл отдаётся, а при ошибках в�
   assert.equal(await fetchSideSnapshot("Berakhot", "2a", (async () => { throw new Error("network"); }) as typeof fetch), null);
   assert.equal(snapshotPath("Bava Kamma", "10b"), "/text/Bava_Kamma/10b.json");
 });
+
+import { commentSnapshotFromLinks, commentsPath, fetchCommentSnapshot, isCommentSnapshot, linksFromCommentSnapshot } from "../app/sefariaSnapshot.ts";
+import { sourceComments } from "../app/sefariaLinks.ts";
+
+const sampleLinks = [
+  { collectiveTitle: { en: "Rashi" }, ref: "Rashi on Bekhorot 2a:1:1", anchorRef: "Bekhorot 2a:1", he: "<b>הלוקח</b> - עובר" },
+  { collectiveTitle: { en: "Tosafot" }, sourceRef: "Tosafot on Bekhorot 2a:2:1", anchorRef: "Bekhorot 2a:2-3", he: "<b>ת״ה</b> – דבר" },
+  { collectiveTitle: { en: "Ramban" }, ref: "Ramban on Bekhorot 2a:1:1", anchorRef: "Bekhorot 2a:1", he: "לא נדרש" },
+  { collectiveTitle: { en: "Rashi" }, ref: "Rashi on Bekhorot 2a:1:1", anchorRef: "Bekhorot 2a:1", he: "<b>הלוקח</b> - עובר" },
+];
+
+test("снимок комментариев даёт тот же результат sourceComments, что и полный список links", () => {
+  const ids = ["2a:1", "2a:2", "2a:3"];
+  const snapshot = commentSnapshotFromLinks(sampleLinks);
+  assert.equal(snapshot.recs.length, 3);
+  assert.equal(isCommentSnapshot(snapshot), true);
+  assert.deepEqual(sourceComments(linksFromCommentSnapshot(snapshot), "Bekhorot", ids), sourceComments(sampleLinks, "Bekhorot", ids));
+});
+
+test("снимок комментариев: чужой формат отвергается, файл читается с обработкой ошибок", async () => {
+  assert.equal(isCommentSnapshot({ v: 1, recs: [{ c: "X", r: "", a: "", h: "" }] }), false);
+  assert.equal(isCommentSnapshot({ v: 2, recs: [] }), false);
+  const good = commentSnapshotFromLinks(sampleLinks);
+  const reply = (body: unknown, ok = true) => (async () => ({ ok, json: async () => body }) as Response) as typeof fetch;
+  assert.deepEqual(await fetchCommentSnapshot("Bekhorot", "2a", reply(good)), good);
+  assert.equal(await fetchCommentSnapshot("Bekhorot", "2a", reply(good, false)), null);
+  assert.equal(await fetchCommentSnapshot("Bekhorot", "2a", reply({ v: 1 })), null);
+  assert.equal(await fetchCommentSnapshot("Bekhorot", "2a", (async () => { throw new Error("x"); }) as typeof fetch), null);
+  assert.equal(commentsPath("Bava Kamma", "3b"), "/comments/Bava_Kamma/3b.json");
+});

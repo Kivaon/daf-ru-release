@@ -1,0 +1,22 @@
+<!doctype html><meta charset="utf-8"><body><pre id="log">start</pre><script>
+const log=m=>{document.getElementById("log").textContent=m};
+const get=async(u)=>{for(let k=0;k<6;k++){try{const r=await fetch(u);if(r.ok){const j=await r.json();if(Array.isArray(j))return j}}catch(e){}await new Promise(r=>setTimeout(r,2000*(k+1)))}throw new Error("fail "+u)};
+const sideList=(d,s)=>{const r=[];for(let i=2;i<=d;i++){r.push(i+"a");if(!(i===d&&s==="a"))r.push(i+"b")}return r};
+(async()=>{
+ const q=new URLSearchParams(location.search);const shard=+(q.get("shard")||0),of=+(q.get("of")||1),conc=+(q.get("conc")||3);
+ const cat=await (await fetch("/catalog.json")).json();
+ const done=new Set(await (await fetch("/done")).json());
+ const jobs=[];let serial=0;
+ for(const t of cat){if(t.n==="Shekalim")continue;for(const side of sideList(t.d,t.s)){if((serial++)%of!==shard)continue;const name=`${t.n.replace(/ /g,"_")}__${side}.json`;if(!done.has(name))jobs.push({t:t.n,side,name})}}
+ window.state={total:jobs.length,count:0,errors:[]};
+ let next=0;
+ const worker=async()=>{while(next<jobs.length){const job=jobs[next++];
+  try{const links=await get(`https://www.sefaria.org/api/links/${encodeURIComponent(job.t+"."+job.side)}?with_text=1`);
+   const recs=links.filter(l=>l&&l.collectiveTitle&&(l.collectiveTitle.en==="Rashi"||l.collectiveTitle.en==="Tosafot")).map(l=>({c:l.collectiveTitle.en,r:l.ref||l.sourceRef,a:l.anchorRef,h:l.he}));
+   await fetch("/save/"+job.name,{method:"POST",body:JSON.stringify({tractate:job.t,side:job.side,recs})});
+  }catch(e){window.state.errors.push(job.name+" "+e.message)}
+  window.state.count++;if(window.state.count%20===0)log(`${window.state.count}/${jobs.length} errors ${window.state.errors.length}`)}};
+ await Promise.all(Array.from({length:conc},worker));
+ window.state.finished=true;log("finished "+window.state.count+"/"+jobs.length+" errors "+window.state.errors.length);
+})();
+</script>
