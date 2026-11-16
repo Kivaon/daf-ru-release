@@ -47,7 +47,7 @@ export default function ViewSettingsPanel({ view, onChange, niqqudAvailable }: P
       <fieldset>
         <legend>Показывать</legend>
         {BLOCKS.map((block) => <label key={block.flag}><input type="checkbox" checked={view[block.flag]} onChange={(event) => set({ [block.flag]: event.target.checked })} />{block.label}</label>)}
-        <label title={niqqudAvailable ? undefined : "Огласованный текст пока не подключён"}><input type="checkbox" checked={view.niqqud} disabled={!niqqudAvailable || !view.original} onChange={(event) => set({ niqqud: event.target.checked })} />Огласовки{!niqqudAvailable && <small> (скоро)</small>}</label>
+        <label title={niqqudAvailable ? undefined : "Для этого листа нет огласованного текста"}><input type="checkbox" checked={view.niqqud} disabled={!niqqudAvailable || !view.original} onChange={(event) => set({ niqqud: event.target.checked })} />Огласовки{!niqqudAvailable && <small> (нет данных)</small>}</label>
       </fieldset>
       <fieldset>
         <legend>Готовые виды</legend>
