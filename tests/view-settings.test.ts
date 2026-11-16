@@ -57,3 +57,13 @@ test('niqqud is removed without touching the letters, and shown only when enable
   assert.equal(originalText('הקטר חלבים', { niqqud: false }, vocal), 'הקטר חלבים');
   assert.equal(originalText(vocal, { niqqud: false }), 'הקטר חלבים');
 });
+
+test('перевод нельзя отключить: ни настройками, ни старым сохранённым набором', () => {
+  assert.equal(normalizeView({ translation: false }).translation, true);
+  assert.equal(normalizeView({ translation: false, original: false }).original, false);
+  const stored = { getItem: () => JSON.stringify({ translation: false, rashi: false }) };
+  const loaded = loadView(stored);
+  assert.equal(loaded.translation, true);
+  assert.equal(loaded.rashi, false);
+  assert.equal(normalizeView(applyPreset(DEFAULT_VIEW, 'no-commentary')).translation, true);
+});
