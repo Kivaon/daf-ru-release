@@ -1,6 +1,7 @@
 "use client";
 
 import {sourceComments} from "./sefariaLinks";
+import {boundaryFlags,clean,fetchSideSnapshot,flagsContinue,flagsOf,type BoundaryFlags} from "./sefariaSnapshot";
 import PrintedCommentary from "./PrintedCommentary";
 import {commentaryLabel} from './printedSources';
 import PrintedLocation from "./PrintedLocation";
@@ -27,7 +28,6 @@ import { TRACTATES, tractateBySefaria } from "./talmudCatalog";
 const EMPTY_SEGMENTS:DafSegment[]=[];
 const EMPTY_COMMENTS:CommentaryLink[]=[];
 const POSITION_KEY = "daf-ru-last-page";
-const clean = (value: string) => value.replace(/<[^>]*>/g, "").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&nbsp;/g, " ").trim();
 const dibur = (value: string) => {
   const bold = value.match(/<b[^>]*>([\s\S]*?)<\/b>/i)?.[1];
   const source = clean(bold || value);
@@ -58,7 +58,7 @@ type GeneratedArticle = {
   pages?:GeneratedPage[];
 };
 
-type PageBundle = { pageKey:string; segments:DafSegment[]; comments:CommentaryLink[]; davidsonHe:string[]; davidsonEn:string[] };
+type PageBundle = { pageKey:string; segments:DafSegment[]; comments:CommentaryLink[]; flags:BoundaryFlags };
 type BoundaryState = { previous?:PageBundle; next?:PageBundle; joinsPrevious:boolean; joinsNext:boolean };
 // Кеш ответов Sefaria на время сессии: переход на соседнюю сторону не запрашивает уже загруженное.
 const sefariaCache=new Map<string,Promise<unknown>>();
@@ -70,6 +70,12 @@ function cachedSefaria<T>(key:string,make:()=>Promise<T>):Promise<T>{
 type TextBundle = Omit<PageBundle,"comments">;
 const loadSideText=(sefaria:string,key:string)=>cachedSefaria(`t|${sefaria}|${key}`,async():Promise<TextBundle>=>{
   const ref=`${sefaria}.${key}`;
+  // Снимок текста на нашем сервере: быстро и не зависит от Sefaria; нет файла — берём живой текст ниже.
+  const snapshot=await fetchSideSnapshot(sefaria,key);
+  if(snapshot){
+    const fromSnapshot=snapshot.segs.map((text,index)=>({id:`${key}:${index+1}`,kind:/^(מתני|מַתְנִי)/.test(text)?"Мишна":"Гемара",text})).filter((item)=>item.text);
+    if(fromSnapshot.length)return{pageKey:key,segments:fromSnapshot,flags:flagsOf(snapshot)};
+  }
   const [textResponse,davidsonResponse]=await Promise.all([
     fetch(`https://www.sefaria.org/api/texts/${encodeURIComponent(ref)}/he/Wikisource_Talmud_Bavli?context=0&commentary=0`),
     fetch(`https://www.sefaria.org/api/texts/${encodeURIComponent(ref)}?context=0&commentary=0`),
@@ -79,7 +85,7 @@ const loadSideText=(sefaria:string,key:string)=>cachedSefaria(`t|${sefaria}|${ke
   if(data.error||!Array.isArray(data.he)||!data.he.every(v=>typeof v==="string"))throw new Error("Sefaria не вернула полный текст листа");
   const davidson=davidsonResponse.ok?await davidsonResponse.json() as {he?:string[];text?:string[]}:{he:[],text:[]};
   const pageSegments=(data.he||[]).map((text,index)=>({id:`${key}:${index+1}`,kind:/^(מתני|מַתְנִי)/.test(clean(text))?"Мишна":"Гемара",text:clean(text)})).filter((item)=>item.text);
-  return{pageKey:key,segments:pageSegments,davidsonHe:davidson.he||[],davidsonEn:davidson.text||[]};
+  return{pageKey:key,segments:pageSegments,flags:boundaryFlags(davidson.he||[],davidson.text||[])};
 });
 const loadSideLinks=(sefaria:string,key:string)=>cachedSefaria(`l|${sefaria}|${key}`,async():Promise<unknown>=>{
   const response=await fetch(`https://www.sefaria.org/api/links/${encodeURIComponent(`${sefaria}.${key}`)}?with_text=1`);
@@ -91,13 +97,7 @@ const pageAfter = (daf:number, side:"a"|"b", lastDaf:number, lastSide:"a"|"b") =
   if(side === "a") return daf === lastDaf && lastSide === "a" ? null : `${daf}b`;
   return daf < lastDaf ? `${daf+1}a` : null;
 };
-const sentenceEnds = (value:string) => /[.!?׃։][\s"'׳״’”)]*$/.test(clean(value));
-const beginsLowercase = (value:string) => /^[^A-Za-z]*[a-z]/.test(clean(value));
-const boundaryContinues = (left:PageBundle, right:PageBundle) => {
-  const leftHe=left.davidsonHe.at(-1)||"", rightHe=right.davidsonHe[0]||"";
-  const leftEn=left.davidsonEn.at(-1)||"", rightEn=right.davidsonEn[0]||"";
-  return Boolean(leftHe && rightHe && leftEn && rightEn && !sentenceEnds(leftHe) && !sentenceEnds(leftEn) && beginsLowercase(rightEn));
-};
+const boundaryContinues = (left:PageBundle, right:PageBundle) => flagsContinue(left.flags,right.flags);
 
 type SiteTool = {
   name:string;
@@ -209,9 +209,8 @@ export default function HomeClient({user,signInHref,signOutHref}:{user:{name:str
         const chosen=wanted&&current.segments.some(s=>s.id===wanted)?wanted:current.segments.some(s=>s.id===requested)?requested!:preferred||"";
         // Соседний текст нужен до показа, только если краевая реплика может продолжаться через границу листа.
         // Условия — необходимая часть boundaryContinues, проверяемая по одной текущей стороне; остальное догрузится фоном.
-        const needPrevious=chosen!==""&&chosen===current.segments[0]?.id&&Boolean(current.davidsonHe[0]&&current.davidsonEn[0]&&beginsLowercase(current.davidsonEn[0]));
-        const lastHe=current.davidsonHe.at(-1)||"",lastEn=current.davidsonEn.at(-1)||"";
-        const needNext=chosen!==""&&chosen===current.segments.at(-1)?.id&&Boolean(lastHe&&lastEn&&!sentenceEnds(lastHe)&&!sentenceEnds(lastEn));
+        const needPrevious=chosen!==""&&chosen===current.segments[0]?.id&&current.flags.firstOk&&current.flags.firstLower;
+        const needNext=chosen!==""&&chosen===current.segments.at(-1)?.id&&current.flags.lastOk&&current.flags.lastOpen;
         const stitched=(previous:TextBundle|undefined,next:TextBundle|undefined):BoundaryState=>({previous:previous&&{...previous,comments:[]},next:next&&{...next,comments:[]},joinsPrevious:Boolean(previous&&boundaryContinues({...previous,comments:[]},{...current,comments:[]})),joinsNext:Boolean(next&&boundaryContinues({...current,comments:[]},{...next,comments:[]}))});
         const previousNow=needPrevious?await previousText:undefined, nextNow=needNext?await nextText:undefined;
         if (controller.signal.aborted) return;

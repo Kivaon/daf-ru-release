@@ -1,0 +1,30 @@
+<!doctype html><meta charset="utf-8"><body><pre id="log">start</pre><script>
+const log=m=>{document.getElementById("log").textContent=m};
+const CH=40;
+const sideList=(d,s)=>{const r=[];for(let i=2;i<=d;i++){r.push(i+"a");if(!(i===d&&s==="a"))r.push(i+"b")}return r};
+const get=async(u)=>{for(let k=0;k<5;k++){try{const r=await fetch(u);if(r.ok){const j=await r.json();if(!j.error)return j}}catch(e){}await new Promise(r=>setTimeout(r,1500*(k+1)))}throw new Error("fail "+u)};
+(async()=>{
+ const cat=await (await fetch("/catalog.json")).json();
+ const done=new Set(await (await fetch("/done")).json());
+ const q=new URLSearchParams(location.search);const shard=+(q.get('shard')||0),of=+(q.get('of')||1);let serial=0;
+ let total=0,count=0;for(const t of cat)total+=Math.ceil(sideList(t.d,t.s).length/CH);total=Math.ceil(total/of);
+ window.state={total,count:0,errors:[]};
+ for(const t of cat){
+  const sides=sideList(t.d,t.s);
+  for(let i=0;i<sides.length;i+=CH){
+   if((serial++)%of!==shard)continue;
+   const part=sides.slice(i,i+CH);const name=`${t.n.replace(/ /g,"_")}__${part[0]}.json`;
+   if(done.has(name)){window.state.count++;continue}
+   const range=`${encodeURIComponent(t.n)}.${part[0]}-${part[part.length-1]}`;
+   try{
+    const [w,d]=await Promise.all([
+     get(`https://www.sefaria.org/api/texts/${range}/he/Wikisource_Talmud_Bavli?context=0&commentary=0`),
+     get(`https://www.sefaria.org/api/texts/${range}?context=0&commentary=0`)]);
+    await fetch("/save/"+name,{method:"POST",body:JSON.stringify({tractate:t.n,sides:part,wiki:w.he,davHe:d.he,davEn:d.text,wikiTitle:w.heVersionTitle,davTitle:d.heVersionTitle})});
+   }catch(e){window.state.errors.push(name+" "+e.message)}
+   window.state.count++;log(`${t.n} ${part[0]} (${window.state.count}/${total}) errors ${window.state.errors.length}`);
+  }
+ }
+ window.state.finished=true;log("finished "+window.state.count+"/"+total+" errors "+window.state.errors.length);
+})();
+</script>

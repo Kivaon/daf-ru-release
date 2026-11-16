@@ -1,0 +1,4 @@
+Снимок текста: Sefaria, версия "Wikisource Talmud Bavli" (лицензия CC BY-SA), собран 16.11.2026.
+Файлы <Трактат>/<сторона>.json: очищенные реплики (без разметки) по номерам Sefaria и четыре признака стыка листов
+(по текстам Davidson; самих текстов Davidson в снимке нет). Сборка: scripts/snapshot-collector, scripts/build-text-snapshot.ts.
+Если файла нет, приложение берёт текст у Sefaria. Обновлять при заметных правках текста в Sefaria.
